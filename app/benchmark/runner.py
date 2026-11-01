@@ -5,11 +5,34 @@ AEGIS Benchmark Runner
 Runs reproducible, interleaved strategy experiments,
 measures execution performance, and independently
 evaluates output correctness against benchmark cases.
+
+Supports:
+- Original built-in benchmark datasets.
+- Validated JSONL research datasets.
+- Approved research records by default.
+- Explicit execution of draft/reviewed pilot records.
+- Partial-metric research cases.
+- Dataset and manifest integrity hashes.
+- Persistent experiment, case, and trial results.
 """
 
+import hashlib
+import json
 import random
 import statistics
 import time
+import uuid
+
+from collections import Counter
+from pathlib import Path
+
+from app.memory.database import (
+    create_research_experiment,
+    save_research_case_result,
+    save_research_trial_result,
+    update_research_experiment_status,
+    update_research_experiment_configuration,
+)
 
 from app.agent.executor import TaskExecutor
 from app.learning.strategy import StrategySystem
@@ -18,6 +41,14 @@ from app.benchmark.dataset import (
     BENCHMARK_CASES,
     BENCHMARK_DATASET_VERSION,
 )
+from app.benchmark.dataset_validator import (
+    DatasetValidationError,
+    DatasetValidator,
+)
+
+
+class ResearchBenchmarkError(RuntimeError):
+    """Raised when a research benchmark cannot be executed."""
 
 
 class BenchmarkRunner:
@@ -65,6 +96,474 @@ class BenchmarkRunner:
             "trials_per_strategy": trials,
             "warmup_trials_per_strategy": warmup_trials,
             "random_seed": seed,
+            "cases": case_results,
+        }
+
+    def run_research_dataset_benchmark(
+        self,
+        dataset_path,
+        manifest_path="datasets/manifest.json",
+        trials=10,
+        warmup_trials=1,
+        seed=42,
+        allow_non_approved=False,
+    ):
+        """
+        Execute a validated AEGIS research dataset.
+
+        Only approved records are accepted by default.
+        Draft and reviewed records require explicit opt-in.
+
+        This initial research runner supports text-based
+        research cases through the existing TaskExecutor.
+
+        The dataset and manifest are never modified.
+
+        Completed experiment metadata, case results, and
+        measured trial results are persisted in SQLite.
+        """
+
+        # ----------------------------------------------------
+        # 1. Validate execution configuration
+        # ----------------------------------------------------
+
+        if type(trials) is not int or trials < 1:
+            raise ResearchBenchmarkError(
+                "Trials must be a positive integer."
+            )
+
+        if type(warmup_trials) is not int or warmup_trials < 0:
+            raise ResearchBenchmarkError(
+                "Warm-up trials must be a non-negative integer."
+            )
+
+        if type(seed) is not int:
+            raise ResearchBenchmarkError(
+                "Seed must be an integer."
+            )
+
+        if type(allow_non_approved) is not bool:
+            raise ResearchBenchmarkError(
+                "allow_non_approved must be a boolean."
+            )
+
+        dataset_file = Path(dataset_path)
+        manifest_file = Path(manifest_path)
+
+        # ----------------------------------------------------
+        # 2. Read and validate the manifest
+        # ----------------------------------------------------
+
+        try:
+
+            manifest = json.loads(
+                manifest_file.read_text(encoding="utf-8")
+            )
+
+        except FileNotFoundError as error:
+
+            raise ResearchBenchmarkError(
+                f"Manifest not found: {manifest_file}"
+            ) from error
+
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
+
+            raise ResearchBenchmarkError(
+                f"Manifest is not valid UTF-8 JSON: {error}"
+            ) from error
+
+        except OSError as error:
+
+            raise ResearchBenchmarkError(
+                f"Could not read manifest: {error}"
+            ) from error
+
+        if not isinstance(manifest, dict):
+
+            raise ResearchBenchmarkError(
+                "Manifest root must be a JSON object."
+            )
+
+        required_manifest_fields = (
+            "dataset_id",
+            "dataset_version",
+            "schema_version",
+            "status",
+            "categories",
+        )
+
+        for field in required_manifest_fields:
+
+            value = manifest.get(field)
+
+            if field == "categories":
+                continue
+
+            if not isinstance(value, str) or not value.strip():
+
+                raise ResearchBenchmarkError(
+                    f"Manifest field '{field}' must be "
+                    "a non-empty string."
+                )
+
+        categories = manifest["categories"]
+
+        if (
+            not isinstance(categories, list)
+            or not categories
+            or any(
+                not isinstance(category, str)
+                or not category.strip()
+                for category in categories
+            )
+            or len(categories) != len(set(categories))
+        ):
+
+            raise ResearchBenchmarkError(
+                "Manifest categories must be unique, "
+                "non-empty strings."
+            )
+
+        validator = DatasetValidator()
+
+        if manifest["schema_version"] != validator.schema_version:
+
+            raise ResearchBenchmarkError(
+                "Manifest schema version does not match "
+                "the installed dataset validator."
+            )
+
+        # ----------------------------------------------------
+        # 3. Validate the complete research dataset
+        # ----------------------------------------------------
+
+        try:
+
+            records = validator.load_jsonl(dataset_file)
+
+        except DatasetValidationError as error:
+
+            raise ResearchBenchmarkError(
+                f"Research dataset validation failed: {error}"
+            ) from error
+
+        if not records:
+
+            raise ResearchBenchmarkError(
+                "Research dataset contains no valid records."
+            )
+
+        # ----------------------------------------------------
+        # 4. Validate categories and approval status
+        # ----------------------------------------------------
+
+        validation_status_counts = Counter()
+
+        for record in records:
+
+            category = record["category"]
+
+            if category not in categories:
+
+                raise ResearchBenchmarkError(
+                    f"Record '{record['case_id']}' uses category "
+                    f"'{category}' which is not declared "
+                    "in the manifest."
+                )
+
+            status = record["validation_status"]
+
+            validation_status_counts[status] += 1
+
+            if (
+                status != "approved"
+                and not allow_non_approved
+            ):
+
+                raise ResearchBenchmarkError(
+                    f"Record '{record['case_id']}' has status "
+                    f"'{status}'. Only approved records can "
+                    "be executed by default. Set "
+                    "allow_non_approved=True for an explicit "
+                    "development or pilot run."
+                )
+
+        # ----------------------------------------------------
+        # 5. Prepare all research cases before execution
+        # ----------------------------------------------------
+
+        prepared_cases = []
+
+        for record in records:
+
+            context = record["context"]
+            text = context.get("text")
+
+            if not isinstance(text, str) or not text.strip():
+
+                raise ResearchBenchmarkError(
+                    f"Record '{record['case_id']}' must contain "
+                    "a non-empty string at context.text. "
+                    "The current executor supports text-based "
+                    "research cases only."
+                )
+
+            prepared_cases.append({
+                "case_id": record["case_id"],
+                "category": record["category"],
+                "difficulty": record["difficulty"],
+                "group_id": record["group_id"],
+                "validation_status": record["validation_status"],
+                "text": text,
+                "expected": record["expected_outcome"],
+                "allow_partial_metrics": True,
+            })
+
+        # ----------------------------------------------------
+        # 6. Calculate input checksums
+        # ----------------------------------------------------
+
+        try:
+
+            dataset_checksum = hashlib.sha256(
+                dataset_file.read_bytes()
+            ).hexdigest()
+
+            manifest_checksum = hashlib.sha256(
+                manifest_file.read_bytes()
+            ).hexdigest()
+
+        except OSError as error:
+
+            raise ResearchBenchmarkError(
+                f"Could not calculate input checksums: {error}"
+            ) from error
+
+        # ----------------------------------------------------
+        # 7. Create persistent experiment record
+        # ----------------------------------------------------
+
+        experiment_id = (
+            f"aegis-exp-{uuid.uuid4().hex}"
+        )
+
+        strategy_ids = list(
+            self.strategy_system.get_all_strategies()
+        )
+
+        if not strategy_ids:
+            raise ResearchBenchmarkError(
+                "No strategies are available."
+            )
+
+        run_type = (
+            "development_pilot"
+            if allow_non_approved
+            else "approved_research"
+        )
+
+        experiment_name = (
+            f"AEGIS Research Benchmark - "
+            f"{manifest['dataset_id']} "
+            f"v{manifest['dataset_version']}"
+        )
+
+        experiment_configuration = {
+            "trials_per_strategy": trials,
+            "warmup_trials_per_strategy": warmup_trials,
+            "random_seed": seed,
+            "allow_non_approved": allow_non_approved,
+            "strategy_ids": strategy_ids,
+            "warmup_results": {},
+            "case_seeds": {},
+        }
+
+        create_research_experiment(
+            experiment_id=experiment_id,
+            experiment_name=experiment_name,
+            dataset_id=manifest["dataset_id"],
+            dataset_version=manifest["dataset_version"],
+            schema_version=manifest["schema_version"],
+            dataset_sha256=dataset_checksum,
+            manifest_sha256=manifest_checksum,
+            dataset_path=str(dataset_file),
+            manifest_path=str(manifest_file),
+            run_type=run_type,
+            manifest_status=manifest["status"],
+            random_seed=seed,
+            trials=trials,
+            warmup_trials=warmup_trials,
+            configuration=experiment_configuration,
+        )
+
+        # ----------------------------------------------------
+        # 8. Execute cases and persist their results
+        # ----------------------------------------------------
+
+        case_results = []
+
+        try:
+
+            for index, case in enumerate(prepared_cases):
+
+                case_seed = seed + index
+
+                experiment_configuration[
+                    "case_seeds"
+                ][case["case_id"]] = case_seed
+
+                benchmark_result = self.run_benchmark(
+                    text=case["text"],
+                    trials=trials,
+                    warmup_trials=warmup_trials,
+                    seed=case_seed,
+                    benchmark_case=case,
+                )
+
+                # Save the completed case.
+                save_research_case_result(
+                    experiment_id=experiment_id,
+                    case_id=case["case_id"],
+                    category=case["category"],
+                    difficulty=case["difficulty"],
+                    group_id=case["group_id"],
+                    validation_status=case["validation_status"],
+                    expected_outcome=case["expected"],
+                    case_status="completed",
+                )
+
+                # Persist measured trials for every strategy.
+                for strategy_id, strategy_result in (
+                    benchmark_result["results"].items()
+                ):
+
+                    # Individual warm-up measurements are not
+                    # part of the measured trial dataset.
+                    experiment_configuration[
+                        "warmup_results"
+                    ].setdefault(
+                        case["case_id"], {}
+                    )[strategy_id] = {
+                        "successful_runs": strategy_result[
+                            "warmup_successful_runs"
+                        ],
+                        "failed_runs": strategy_result[
+                            "warmup_failed_runs"
+                        ],
+                    }
+
+                    for trial_result in strategy_result[
+                        "trial_results"
+                    ]:
+
+                        # Preserve execution errors separately
+                        # from evaluation errors in the runner.
+                        error_type = (
+                            trial_result["error_type"]
+                            or trial_result[
+                                "evaluation_error_type"
+                            ]
+                        )
+
+                        error_message = (
+                            trial_result["error"]
+                            or trial_result["evaluation_error"]
+                        )
+
+                        save_research_trial_result(
+                            experiment_id=experiment_id,
+                            case_id=case["case_id"],
+                            strategy_id=strategy_id,
+                            trial_number=trial_result["trial"],
+                            is_warmup=False,
+                            execution_success=trial_result[
+                                "execution_success"
+                            ],
+                            is_correct=trial_result["correct"],
+                            execution_time_seconds=trial_result[
+                                "execution_time"
+                            ],
+                            error_type=error_type,
+                            error_message=error_message,
+                        )
+
+                case_results.append({
+                    "case_id": case["case_id"],
+                    "category": case["category"],
+                    "difficulty": case["difficulty"],
+                    "group_id": case["group_id"],
+                    "validation_status": case["validation_status"],
+                    "expected": case["expected"],
+                    "benchmark": benchmark_result,
+                })
+
+            # Save the final configuration, including warm-up
+            # summaries and the deterministic case seed mapping.
+            update_research_experiment_configuration(
+                experiment_id=experiment_id,
+                configuration=experiment_configuration,
+            )
+
+            # Mark the experiment completed only after all
+            # case and measured trial records have been saved.
+            update_research_experiment_status(
+                experiment_id=experiment_id,
+                status="completed",
+                total_cases=len(case_results),
+            )
+
+        except Exception as error:
+
+            # Preserve the failed experiment in the database.
+            try:
+
+                update_research_experiment_configuration(
+                    experiment_id=experiment_id,
+                    configuration=experiment_configuration,
+                )
+
+                update_research_experiment_status(
+                    experiment_id=experiment_id,
+                    status="failed",
+                    total_cases=len(case_results),
+                    error_message=(
+                        f"{type(error).__name__}: {error}"
+                    ),
+                )
+
+            except Exception:
+                # Do not replace the original benchmark error
+                # with a secondary database update error.
+                pass
+
+            raise
+
+        # ----------------------------------------------------
+        # 9. Return reproducible research metadata
+        # ----------------------------------------------------
+
+        return {
+            "experiment_id": experiment_id,
+            "experiment_name": experiment_name,
+            "experiment_status": "completed",
+            "run_type": run_type,
+            "dataset_id": manifest["dataset_id"],
+            "dataset_version": manifest["dataset_version"],
+            "schema_version": manifest["schema_version"],
+            "manifest_status": manifest["status"],
+            "dataset_path": str(dataset_file),
+            "manifest_path": str(manifest_file),
+            "dataset_sha256": dataset_checksum,
+            "manifest_sha256": manifest_checksum,
+            "total_cases": len(case_results),
+            "total_strategies": len(strategy_ids),
+            "trials_per_strategy": trials,
+            "warmup_trials_per_strategy": warmup_trials,
+            "random_seed": seed,
+            "allow_non_approved": allow_non_approved,
+            "validation_status_counts": dict(
+                sorted(validation_status_counts.items())
+            ),
             "cases": case_results,
         }
 
@@ -229,7 +728,10 @@ class BenchmarkRunner:
 
                     evaluation = None
                     evaluation_error = None
+                    evaluation_error_type = None
+
                     trial_error = str(error)
+                    trial_error_type = type(error).__name__
 
                 else:
 
@@ -247,6 +749,8 @@ class BenchmarkRunner:
                     )
 
                     trial_error = None
+                    trial_error_type = None
+                    evaluation_error_type = None
 
                     # Evaluate independently of execution.
                     try:
@@ -270,6 +774,7 @@ class BenchmarkRunner:
 
                         evaluation = None
                         evaluation_error = str(error)
+                        evaluation_error_type = type(error).__name__
 
                 execution_time_seconds = (
                     execution_time_ns / 1_000_000_000
@@ -291,7 +796,9 @@ class BenchmarkRunner:
                     ),
                     "evaluation": evaluation,
                     "evaluation_error": evaluation_error,
+                    "evaluation_error_type": evaluation_error_type,
                     "error": trial_error,
+                    "error_type": trial_error_type,
                 })
 
         # Calculate statistics using measured trials only.

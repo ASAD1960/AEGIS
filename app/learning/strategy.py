@@ -25,13 +25,19 @@ class StrategySystem:
             "step_by_step": {
                 "name": "Step-by-Step Approach",
                 "description": (
-                    "Break a task into smaller, manageable steps."
+                    "Break a task into smaller, manageable "
+                    "text-analysis operations."
                 ),
                 "steps": [
                     "validate_input",
                     "count_words",
                     "count_characters",
-                    "count_sentences"
+                    "count_sentences",
+                    "count_letters",
+                    "count_digits",
+                    "count_whitespace",
+                    "count_punctuation",
+                    "count_symbols",
                 ]
             },
 

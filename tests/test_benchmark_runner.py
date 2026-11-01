@@ -313,3 +313,216 @@ def test_runner_executes_versioned_dataset_against_all_strategies():
             )
 
     assert total_evaluations == 30
+# ============================================================
+# RESEARCH DATASET INTEGRATION TESTS
+# ============================================================
+
+def _make_research_record(
+    case_id="basic_execution_test_case_0001",
+    validation_status="approved",
+):
+    return {
+        "case_id": case_id,
+        "category": "basic_execution",
+        "difficulty": "basic",
+        "task": "Count the sentences in the supplied text.",
+        "context": {
+            "text": "First sentence. Second sentence? Third sentence!"
+        },
+        "expected_outcome": {
+            "sentence_count": 3
+        },
+        "success_criteria": [
+            "The sentence_count value is correct."
+        ],
+        "allowed_tools": ["text_tool"],
+        "source": "Original synthetic test record.",
+        "license": "Original synthetic; no third-party source material.",
+        "group_id": "basic_execution_test_group_0001",
+        "validation_status": validation_status,
+    }
+
+
+def _write_research_dataset(
+    directory,
+    records,
+    manifest_status="development",
+):
+    import json
+
+    dataset_path = directory / "research_dataset.jsonl"
+    manifest_path = directory / "manifest.json"
+
+    with dataset_path.open("w", encoding="utf-8") as file:
+        for record in records:
+            file.write(json.dumps(record) + "\n")
+
+    manifest = {
+        "dataset_name": "AEGIS Research Test Dataset",
+        "dataset_id": "aegis-test-dataset",
+        "dataset_version": "0.1.0",
+        "schema_version": "0.1.0",
+        "status": manifest_status,
+        "categories": [
+            "basic_execution",
+            "multi_step_planning",
+            "memory_retrieval",
+            "tool_selection",
+            "failure_recovery",
+            "feedback_adaptation",
+        ],
+    }
+
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2),
+        encoding="utf-8",
+    )
+
+    return dataset_path, manifest_path
+
+
+def test_research_runner_rejects_draft_records_by_default(tmp_path):
+
+    from app.benchmark.runner import (
+        BenchmarkRunner,
+        ResearchBenchmarkError,
+    )
+
+    dataset_path, manifest_path = _write_research_dataset(
+        tmp_path,
+        [_make_research_record(validation_status="draft")],
+    )
+
+    runner = BenchmarkRunner()
+
+    with pytest.raises(ResearchBenchmarkError):
+        runner.run_research_dataset_benchmark(
+            dataset_path=dataset_path,
+            manifest_path=manifest_path,
+            trials=1,
+            warmup_trials=0,
+        )
+
+
+def test_research_runner_can_execute_draft_pilot_explicitly(tmp_path):
+
+    from app.benchmark.runner import BenchmarkRunner
+
+    dataset_path, manifest_path = _write_research_dataset(
+        tmp_path,
+        [_make_research_record(validation_status="draft")],
+    )
+
+    runner = BenchmarkRunner()
+
+    result = runner.run_research_dataset_benchmark(
+        dataset_path=dataset_path,
+        manifest_path=manifest_path,
+        trials=1,
+        warmup_trials=0,
+        seed=42,
+        allow_non_approved=True,
+    )
+
+    assert result["dataset_id"] == "aegis-test-dataset"
+    assert result["dataset_version"] == "0.1.0"
+    assert result["manifest_status"] == "development"
+    assert result["total_cases"] == 1
+    assert result["validation_status_counts"] == {"draft": 1}
+
+    case_result = result["cases"][0]
+
+    assert case_result["case_id"] == (
+        "basic_execution_test_case_0001"
+    )
+    assert case_result["validation_status"] == "draft"
+
+    for strategy_data in case_result["benchmark"]["results"].values():
+        assert strategy_data["correct_runs"] == 1
+        assert strategy_data["incorrect_runs"] == 0
+
+
+def test_research_runner_evaluates_partial_sentence_metrics(tmp_path):
+
+    from app.benchmark.runner import BenchmarkRunner
+
+    dataset_path, manifest_path = _write_research_dataset(
+        tmp_path,
+        [_make_research_record()],
+    )
+
+    runner = BenchmarkRunner()
+
+    result = runner.run_research_dataset_benchmark(
+        dataset_path=dataset_path,
+        manifest_path=manifest_path,
+        trials=2,
+        warmup_trials=0,
+        seed=42,
+    )
+
+    case_result = result["cases"][0]
+
+    assert case_result["expected"] == {"sentence_count": 3}
+
+    for strategy_data in case_result["benchmark"]["results"].values():
+        assert strategy_data["successful_runs"] == 2
+        assert strategy_data["correct_runs"] == 2
+        assert strategy_data["incorrect_runs"] == 0
+        assert strategy_data["evaluation_failed_runs"] == 0
+
+
+def test_research_runner_rejects_invalid_dataset(tmp_path):
+
+    from app.benchmark.runner import (
+        BenchmarkRunner,
+        ResearchBenchmarkError,
+    )
+
+    dataset_path, manifest_path = _write_research_dataset(
+        tmp_path,
+        [_make_research_record()],
+    )
+
+    # Introduce malformed JSON into the dataset.
+    dataset_path.write_text(
+        '{"case_id": "broken", invalid json}\n',
+        encoding="utf-8",
+    )
+
+    runner = BenchmarkRunner()
+
+    with pytest.raises(ResearchBenchmarkError):
+        runner.run_research_dataset_benchmark(
+            dataset_path=dataset_path,
+            manifest_path=manifest_path,
+            trials=1,
+            warmup_trials=0,
+        )
+
+
+def test_research_runner_preserves_dataset_records_and_manifest(
+    tmp_path,
+):
+
+    dataset_path, manifest_path = _write_research_dataset(
+        tmp_path,
+        [_make_research_record()],
+    )
+
+    original_dataset = dataset_path.read_bytes()
+    original_manifest = manifest_path.read_bytes()
+
+    from app.benchmark.runner import BenchmarkRunner
+
+    runner = BenchmarkRunner()
+
+    runner.run_research_dataset_benchmark(
+        dataset_path=dataset_path,
+        manifest_path=manifest_path,
+        trials=1,
+        warmup_trials=0,
+    )
+
+    assert dataset_path.read_bytes() == original_dataset
+    assert manifest_path.read_bytes() == original_manifest
