@@ -1,0 +1,60 @@
+
+{
+  "dataset_name": "AEGIS Research Dataset",
+  "dataset_id": "aegis-research-v1",
+  "dataset_version": "0.1.0",
+  "schema_version": "0.1.0",
+  "description": "A reproducible benchmark dataset for evaluating autonomous agent task execution, planning, memory retrieval, tool selection, failure recovery, and feedback-driven adaptation.",
+  "status": "development",
+  "language": "en",
+  "categories": [
+    "basic_execution",
+    "multi_step_planning",
+    "memory_retrieval",
+    "tool_selection",
+    "failure_recovery",
+    "feedback_adaptation"
+  ],
+  "difficulty_levels": [
+    "basic",
+    "intermediate",
+    "advanced"
+  ],
+  "data_splits": {
+    "strategy": "group_aware",
+    "train": 0.70,
+    "validation": 0.15,
+    "test": 0.15,
+    "random_seed": 42,
+    "prevent_group_leakage": true
+  },
+  "provenance": {
+    "require_source": true,
+    "require_license": true,
+    "require_group_id": true,
+    "require_validation_status": true,
+    "allowed_statuses": [
+      "draft",
+      "reviewed",
+      "approved"
+    ]
+  },
+  "quality_control": {
+    "reject_duplicate_case_ids": true,
+    "reject_invalid_records": true,
+    "track_validation_warnings": true,
+    "require_human_review_before_approval": true
+  },
+  "research_objectives": [
+    "Evaluate task execution reliability.",
+    "Measure multi-step planning performance.",
+    "Evaluate memory retrieval quality.",
+    "Measure tool selection accuracy.",
+    "Assess failure detection and recovery.",
+    "Evaluate feedback-driven strategy adaptation."
+  ],
+  "target_case_count": 6000,
+  "current_case_count": 0,
+  "created_by": "AEGIS Research Project",
+  "notes": "The target case count is a future development goal, not an existing dataset size. Dataset records must be validated and provenance documented before research use."
+}
