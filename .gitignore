@@ -33,3 +33,5 @@ Thumbs.db
 
 # Generated machine-learning artifacts
 models/checkpoints/
+# Dataset recovery backups
+datasets/raw/*.backup-*
