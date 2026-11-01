@@ -1,0 +1,35 @@
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local databases — preserve locally, do not upload
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+
+# Logs and temporary files
+logs/
+*.log
+*.tmp
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Editor and operating system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Generated machine-learning artifacts
+models/checkpoints/
