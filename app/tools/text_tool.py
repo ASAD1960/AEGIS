@@ -30,11 +30,6 @@ punctuation_count:
 
 symbol_count:
     Number of Unicode characters whose category begins with S.
-
-Note:
-    Unicode code points are not necessarily the same as
-    user-perceived characters. Some emoji and accented
-    characters consist of multiple code points.
 """
 
 import unicodedata
@@ -43,18 +38,101 @@ import unicodedata
 class TextAnalysisTool:
     """Perform deterministic text analysis."""
 
-    def analyze(self, text: str) -> dict:
-        """
-        Analyze text and return its original and extended metrics.
+    def __init__(self):
+        self.input_validation_calls = 0
 
-        Existing metric definitions are preserved for compatibility.
-        """
+    def reset_validation_count(self) -> None:
+        """Reset the validation-call counter."""
+        self.input_validation_calls = 0
+
+    def _validate_text(self, text: str) -> None:
+        """Validate input and record the validation call."""
+
+        self.input_validation_calls += 1
 
         if not isinstance(text, str):
             raise TypeError("Input must be a string.")
 
         if not text.strip():
             raise ValueError("Text cannot be empty.")
+
+    def count_words(self, text: str) -> int:
+        self._validate_text(text)
+        return len(text.split())
+
+    def count_characters(self, text: str) -> int:
+        self._validate_text(text)
+        return len(text)
+
+    def count_sentences(self, text: str) -> int:
+        self._validate_text(text)
+
+        sentences = [
+            sentence
+            for sentence in (
+                text.replace("!", ".")
+                .replace("?", ".")
+                .split(".")
+            )
+            if sentence.strip()
+        ]
+
+        return len(sentences)
+
+    def count_letters(self, text: str) -> int:
+        self._validate_text(text)
+
+        return sum(
+            1
+            for character in text
+            if unicodedata.category(character).startswith("L")
+        )
+
+    def count_digits(self, text: str) -> int:
+        self._validate_text(text)
+
+        return sum(
+            1
+            for character in text
+            if unicodedata.category(character) == "Nd"
+        )
+
+    def count_whitespace(self, text: str) -> int:
+        self._validate_text(text)
+
+        return sum(
+            1
+            for character in text
+            if character.isspace()
+        )
+
+    def count_punctuation(self, text: str) -> int:
+        self._validate_text(text)
+
+        return sum(
+            1
+            for character in text
+            if unicodedata.category(character).startswith("P")
+        )
+
+    def count_symbols(self, text: str) -> int:
+        self._validate_text(text)
+
+        return sum(
+            1
+            for character in text
+            if unicodedata.category(character).startswith("S")
+        )
+
+    def analyze(self, text: str) -> dict:
+        """
+        Perform all eight metrics in one pass.
+
+        This preserves the original direct-analysis implementation
+        and its counting conventions.
+        """
+
+        self._validate_text(text)
 
         words = text.split()
 
@@ -93,12 +171,9 @@ class TextAnalysisTool:
                 symbol_count += 1
 
         return {
-            # Existing metrics: preserve their behavior.
             "word_count": len(words),
             "character_count": len(text),
             "sentence_count": len(sentences),
-
-            # BE-02: Unicode-aware character analysis.
             "letter_count": letter_count,
             "digit_count": digit_count,
             "whitespace_count": whitespace_count,

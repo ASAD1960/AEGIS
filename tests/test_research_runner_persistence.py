@@ -1,3 +1,4 @@
+
 import json
 
 from app.benchmark.runner import BenchmarkRunner
@@ -136,6 +137,61 @@ def test_research_runner_persists_cases_and_measured_trials(tmp_path):
         trial["is_correct"] == 1
         for trial in trials
     )
+
+    # Verify that execution instrumentation is persisted.
+    expected_details = {
+        "direct": {
+            "one_pass_analysis_calls": 1,
+            "individual_metric_calls": 0,
+            "analysis_and_metric_method_calls": 1,
+            "verification_operations": 0,
+            "execution_step_count": 1,
+            "verification_passed": None,
+        },
+        "step_by_step": {
+            "one_pass_analysis_calls": 0,
+            "individual_metric_calls": 8,
+            "analysis_and_metric_method_calls": 8,
+            "verification_operations": 0,
+            "execution_step_count": 8,
+            "verification_passed": None,
+        },
+        "careful": {
+            "one_pass_analysis_calls": 1,
+            "individual_metric_calls": 8,
+            "analysis_and_metric_method_calls": 9,
+            "verification_operations": 8,
+            "execution_step_count": 4,
+            "verification_passed": True,
+        },
+    }
+
+    expected_validation_calls = {
+        "direct": 1,
+        "step_by_step": 8,
+        "careful": 10,
+    }
+
+    for trial in trials:
+
+        details_json = trial["execution_details_json"]
+
+        assert details_json is not None
+
+        details = json.loads(details_json)
+
+        strategy_id = trial["strategy_id"]
+
+        assert details["strategy_id"] == strategy_id
+
+        for field, expected_value in (
+            expected_details[strategy_id].items()
+        ):
+            assert details[field] == expected_value
+
+        assert details["input_validation_calls"] == (
+            expected_validation_calls[strategy_id]
+        )
 
 
 def test_research_runner_preserves_warmup_summary(tmp_path):

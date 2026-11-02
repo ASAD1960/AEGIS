@@ -14,6 +14,7 @@ Supports:
 - Partial-metric research cases.
 - Dataset and manifest integrity hashes.
 - Persistent experiment, case, and trial results.
+- Per-trial execution instrumentation metadata.
 """
 
 import hashlib
@@ -485,6 +486,9 @@ class BenchmarkRunner:
                             ],
                             error_type=error_type,
                             error_message=error_message,
+                            execution_details=trial_result.get(
+                                "execution_details"
+                            ),
                         )
 
                 case_results.append({
@@ -709,6 +713,9 @@ class BenchmarkRunner:
 
                 start_time = time.perf_counter_ns()
 
+                # Metadata is absent if execution fails.
+                execution_details = None
+
                 # Execute and measure only the execution phase.
                 try:
 
@@ -746,6 +753,11 @@ class BenchmarkRunner:
                     data["results"] = execution_result["results"]
                     data["execution_history"] = (
                         execution_result["execution_history"]
+                    )
+
+                    # Capture the instrumentation metadata.
+                    execution_details = execution_result.get(
+                        "execution_details"
                     )
 
                     trial_error = None
@@ -799,6 +811,7 @@ class BenchmarkRunner:
                     "evaluation_error_type": evaluation_error_type,
                     "error": trial_error,
                     "error_type": trial_error_type,
+                    "execution_details": execution_details,
                 })
 
         # Calculate statistics using measured trials only.

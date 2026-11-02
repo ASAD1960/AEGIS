@@ -5,9 +5,8 @@ AEGIS Persistent Memory
 Manages user feedback, legacy benchmark results,
 and reproducible research experiment storage.
 """
+
 import json
-import sqlite3
-from pathlib import Path
 import sqlite3
 from pathlib import Path
 
@@ -74,7 +73,7 @@ def initialize_database():
         """)
 
         # --------------------------------------------------
-        # New research experiment storage.
+        # Research experiment storage.
         # --------------------------------------------------
 
         connection.execute("""
@@ -129,7 +128,7 @@ def initialize_database():
         """)
 
         # --------------------------------------------------
-        # Individual strategy trial results.
+        # Individual research trial results.
         # --------------------------------------------------
 
         connection.execute("""
@@ -155,6 +154,23 @@ def initialize_database():
                     ON DELETE CASCADE
             )
         """)
+
+        # --------------------------------------------------
+        # Backward-compatible research trial migration.
+        # --------------------------------------------------
+
+        trial_columns = [
+            row[1]
+            for row in connection.execute(
+                "PRAGMA table_info(research_trial_results)"
+            ).fetchall()
+        ]
+
+        if "execution_details_json" not in trial_columns:
+            connection.execute("""
+                ALTER TABLE research_trial_results
+                ADD COLUMN execution_details_json TEXT
+            """)
 
         # --------------------------------------------------
         # Research query indexes.
@@ -310,6 +326,7 @@ def get_all_benchmark_results():
 
         return cursor.fetchall()
 
+
 # ==========================================================
 # Research experiment persistence.
 # ==========================================================
@@ -357,8 +374,10 @@ def create_research_experiment(
     ):
         if (
             len(value) != 64
-            or any(character not in "0123456789abcdefABCDEF"
-                   for character in value)
+            or any(
+                character not in "0123456789abcdefABCDEF"
+                for character in value
+            )
         ):
             raise ValueError(f"{field} must be a valid SHA-256 hash.")
 
@@ -382,7 +401,9 @@ def create_research_experiment(
             allow_nan=False,
         )
     except (TypeError, ValueError) as error:
-        raise ValueError("Configuration must contain valid JSON data.") from error
+        raise ValueError(
+            "Configuration must contain valid JSON data."
+        ) from error
 
     with get_connection() as connection:
         cursor = connection.execute(
@@ -465,7 +486,9 @@ def save_research_case_result(
             allow_nan=False,
         )
     except (TypeError, ValueError) as error:
-        raise ValueError("Expected outcome must contain valid JSON data.") from error
+        raise ValueError(
+            "Expected outcome must contain valid JSON data."
+        ) from error
 
     with get_connection() as connection:
         cursor = connection.execute(
@@ -508,6 +531,7 @@ def save_research_trial_result(
     execution_time_seconds=None,
     error_type=None,
     error_message=None,
+    execution_details=None,
 ):
     """Save one individual strategy execution."""
 
@@ -547,6 +571,27 @@ def save_research_trial_result(
         if value is not None and not isinstance(value, str):
             raise ValueError(f"{field} must be a string or None.")
 
+    execution_details_json = None
+
+    if execution_details is not None:
+
+        if not isinstance(execution_details, dict):
+            raise ValueError(
+                "Execution details must be a dictionary or None."
+            )
+
+        try:
+            execution_details_json = json.dumps(
+                execution_details,
+                ensure_ascii=False,
+                sort_keys=True,
+                allow_nan=False,
+            )
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                "Execution details must contain valid JSON data."
+            ) from error
+
     with get_connection() as connection:
         cursor = connection.execute(
             """
@@ -560,9 +605,10 @@ def save_research_trial_result(
                 is_correct,
                 execution_time_seconds,
                 error_type,
-                error_message
+                error_message,
+                execution_details_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 experiment_id,
@@ -575,6 +621,7 @@ def save_research_trial_result(
                 execution_time_seconds,
                 error_type,
                 error_message,
+                execution_details_json,
             ),
         )
 
@@ -696,6 +743,8 @@ def get_research_trial_results(experiment_id, case_id=None):
             ).fetchall()
 
         return [dict(row) for row in rows]
+
+
 def update_research_experiment_configuration(
     experiment_id,
     configuration,

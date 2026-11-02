@@ -233,3 +233,111 @@ def test_evaluator_rejects_unsupported_metric(
             invalid_case,
             {"results": {}},
         )
+
+
+def test_direct_strategy_uses_one_pass_analysis(monkeypatch):
+
+    executor = TaskExecutor()
+    original_analyze = executor.text_tool.analyze
+    calls = {"count": 0}
+
+    def tracked_analyze(text):
+        calls["count"] += 1
+        return original_analyze(text)
+
+    monkeypatch.setattr(
+        executor.text_tool,
+        "analyze",
+        tracked_analyze,
+    )
+
+    result = executor.execute("AEGIS research platform", "direct")
+
+    assert calls["count"] == 1
+    assert "analyze_text" in result["results"]
+
+
+def test_step_by_step_does_not_use_one_pass_analysis(monkeypatch):
+
+    executor = TaskExecutor()
+
+    def unexpected_analysis(text):
+        raise AssertionError(
+            "Step-by-step strategy must not call analyze()."
+        )
+
+    monkeypatch.setattr(
+        executor.text_tool,
+        "analyze",
+        unexpected_analysis,
+    )
+
+    result = executor.execute(
+        "AEGIS research platform 2026!",
+        "step_by_step",
+    )
+
+    assert "analysis_summary" in result["results"]
+    assert "analyze_text" not in result["results"]
+    assert len(result["results"]["analysis_summary"]) == 8
+
+
+def test_step_by_step_calls_each_individual_metric(monkeypatch):
+
+    executor = TaskExecutor()
+    calls = []
+
+    for method_name in executor.METRIC_METHODS.values():
+
+        original_method = getattr(
+            executor.text_tool,
+            method_name,
+        )
+
+        def tracked_method(
+            text,
+            method=original_method,
+            name=method_name,
+        ):
+            calls.append(name)
+            return method(text)
+
+        monkeypatch.setattr(
+            executor.text_tool,
+            method_name,
+            tracked_method,
+        )
+
+    executor.execute(
+        "AEGIS research platform 2026!",
+        "step_by_step",
+    )
+
+    assert len(calls) == 8
+    assert set(calls) == set(executor.METRIC_METHODS.values())
+
+
+def test_careful_strategy_detects_incorrect_analysis(monkeypatch):
+
+    executor = TaskExecutor()
+    original_analyze = executor.text_tool.analyze
+
+    def incorrect_analysis(text):
+        result = original_analyze(text)
+        result["word_count"] += 100
+        return result
+
+    monkeypatch.setattr(
+        executor.text_tool,
+        "analyze",
+        incorrect_analysis,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Result verification failed",
+    ):
+        executor.execute(
+            "AEGIS research platform",
+            "careful",
+        )
