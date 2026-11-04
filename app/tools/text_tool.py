@@ -34,12 +34,38 @@ symbol_count:
 
 import unicodedata
 
+from app.tools.base import BaseTool
 
-class TextAnalysisTool:
+
+class TextAnalysisTool(BaseTool):
     """Perform deterministic text analysis."""
+
+    name = "text_analysis"
+    description = (
+        "Analyzes text and calculates eight text metrics."
+    )
 
     def __init__(self):
         self.input_validation_calls = 0
+
+    def execute(self, **kwargs):
+        """
+        Execute text analysis through the common tool interface.
+        """
+
+        if "text" not in kwargs:
+            raise TypeError(
+                "TextAnalysisTool.execute() requires a 'text' argument."
+            )
+
+        unexpected = set(kwargs) - {"text"}
+
+        if unexpected:
+            raise TypeError(
+                f"Unexpected arguments: {sorted(unexpected)}"
+            )
+
+        return self.analyze(kwargs["text"])
 
     def reset_validation_count(self) -> None:
         """Reset the validation-call counter."""

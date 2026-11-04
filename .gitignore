@@ -35,3 +35,10 @@ Thumbs.db
 models/checkpoints/
 # Dataset recovery backups
 datasets/raw/*.backup-*
+# User-uploaded files
+data/uploads/
+# Database and source backups
+*.backup
+*.bak
+# Local test data
+data/sample_employees.csv

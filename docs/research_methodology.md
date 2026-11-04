@@ -1,4 +1,3 @@
-
 # AEGIS — Research Methodology
 
 ## 1. Research Overview
@@ -122,6 +121,10 @@ Feedback-based preference and objective correctness will be evaluated separately
 
 ## 10. Statistical Analysis
 
+AEGIS will use descriptive and inferential statistical analysis to evaluate strategy performance.
+
+### 10.1 Descriptive Statistics
+
 Experiments will report:
 
 - Mean execution time
@@ -130,10 +133,103 @@ Experiments will report:
 - Task success rate
 - Correctness rate
 - Failure rate
+- Execution and instrumentation overhead
 
-Results will be collected across multiple tasks and repeated trials.
+Warm-up trials will be excluded from measured performance statistics.
+
+### 10.2 Unit of Analysis
+
+The benchmark case is the primary unit of statistical analysis.
+
+Repeated measured trials belonging to the same case will first be aggregated separately for each strategy.
+
+For each case and strategy, the analysis will calculate:
+
+- Execution success proportion
+- Correctness proportion
+- Median execution time among successful trials with valid timing measurements
+
+Individual repeated trials will not be treated as independent observations in paired statistical tests.
+
+### 10.3 Paired Strategy Comparisons
+
+Strategies will be compared using common benchmark cases.
+
+The planned pairwise comparisons are:
+
+- Direct versus Step-by-Step
+- Direct versus Careful
+- Step-by-Step versus Careful
+
+For each outcome, only cases with usable measurements from both strategies will be included.
+
+The number of matched cases and excluded cases will be reported.
+
+Comparisons will use the same benchmark cases wherever possible to reduce variation caused by differences in task difficulty.
+
+### 10.4 Confidence Intervals
+
+Paired bootstrap resampling will estimate 95% confidence intervals for differences between strategies.
+
+Resampling will occur at the benchmark-case level. All strategy measurements associated with a selected case will remain together during resampling.
+
+The bootstrap procedure will use a recorded random seed to support reproducibility.
+
+### 10.5 Statistical Significance
+
+Two-sided paired permutation tests will evaluate whether observed differences are consistent with the null hypothesis of no systematic paired difference.
+
+Permutation procedures will operate on case-level paired differences rather than treating repeated trials as independent observations.
+
+Randomized procedures will use recorded seeds to support reproducibility.
+
+The number of permutations, test assumptions, and calculation procedures will be documented.
+
+### 10.6 Multiple Comparisons
+
+Holm correction will be applied to p-values from the three planned pairwise strategy comparisons within each outcome family.
+
+Both raw and adjusted p-values will be reported.
+
+This correction will reduce the risk of incorrectly identifying differences as statistically significant when multiple comparisons are performed.
+
+### 10.7 Effect Sizes
+
+Reports will include:
+
+- Mean paired difference in the original measurement units
+- Standardized paired effect size when mathematically defined
+- Confidence intervals
+- Matched sample size
+
+For execution time, differences will be interpreted with their direction clearly identified. A negative or positive difference will not be described as an improvement without considering which strategy's measurement is being subtracted from the other.
+
+### 10.8 Category and Difficulty Analysis
+
+Strategy comparisons will also be examined across benchmark categories and difficulty levels.
+
+These subgroup analyses will be interpreted cautiously because smaller groups may provide insufficient statistical power.
+
+The number of matched cases in each category and difficulty group will be reported.
+
+Subgroup findings will be treated as exploratory unless sufficient observations and an appropriate analysis plan support stronger conclusions.
+
+### 10.9 Interpretation
+
+Statistical significance alone will not establish practical superiority.
 
 Small performance differences will not be treated as meaningful without sufficient experimental evidence.
+
+Results will distinguish:
+
+- Statistically supported differences
+- Practical performance differences
+- Inconclusive findings
+- Limitations caused by sample size or missing measurements
+
+No strategy will be described as universally superior based on a single experiment.
+
+All findings, including negative or inconclusive results, will be reported honestly.
 
 ## 11. Reproducibility
 
@@ -145,6 +241,8 @@ To support reproducible experiments:
 - Preserve benchmark results.
 - Use consistent evaluation procedures.
 - Document changes to strategies and learning algorithms.
+- Record random seeds used by randomized procedures.
+- Preserve the statistical analysis configuration and experiment outputs.
 
 ## 12. Ethical and Safety Considerations
 
