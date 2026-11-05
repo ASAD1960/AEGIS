@@ -3,11 +3,13 @@
 AEGIS Persistent Memory
 
 Manages user feedback, legacy benchmark results,
-and reproducible research experiment storage.
+reproducible research experiment storage, and
+persistent conversation history.
 """
 
 import json
 import sqlite3
+import uuid
 from pathlib import Path
 
 
@@ -198,6 +200,41 @@ def initialize_database():
             CREATE INDEX IF NOT EXISTS
             idx_research_trials_strategy
             ON research_trial_results(strategy_id)
+        """)
+
+        # --------------------------------------------------
+        # Persistent conversation storage.
+        # --------------------------------------------------
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS conversations (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL DEFAULT 'New conversation',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS conversation_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id TEXT NOT NULL,
+                role TEXT NOT NULL
+                    CHECK(role IN ('user', 'assistant')),
+                content TEXT NOT NULL,
+                tool_name TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                FOREIGN KEY (conversation_id)
+                    REFERENCES conversations(id)
+                    ON DELETE CASCADE
+            )
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS
+            idx_conversation_messages_history
+            ON conversation_messages(conversation_id, id)
         """)
 
 
@@ -786,3 +823,209 @@ def update_research_experiment_configuration(
             )
 
     return True
+
+
+# ==========================================================
+# Persistent conversation functions.
+# ==========================================================
+
+def create_conversation(title="New conversation"):
+    """Create a conversation and return its unique ID."""
+
+    if not isinstance(title, str) or not title.strip():
+        raise ValueError("Conversation title must be a non-empty string.")
+
+    conversation_id = str(uuid.uuid4())
+
+    with get_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO conversations (id, title)
+            VALUES (?, ?)
+            """,
+            (conversation_id, title.strip()[:100]),
+        )
+
+    return conversation_id
+
+
+def save_conversation_message(
+    conversation_id,
+    role,
+    content,
+    tool_name=None,
+):
+    """Persist one user or assistant message."""
+
+    if not isinstance(conversation_id, str) or not conversation_id.strip():
+        raise ValueError("Conversation ID must be a non-empty string.")
+
+    if role not in ("user", "assistant"):
+        raise ValueError("Role must be 'user' or 'assistant'.")
+
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError("Message content must be a non-empty string.")
+
+    if tool_name is not None and not isinstance(tool_name, str):
+        raise ValueError("Tool name must be a string or None.")
+
+    with get_connection() as connection:
+
+        conversation = connection.execute(
+            """
+            SELECT id
+            FROM conversations
+            WHERE id = ?
+            """,
+            (conversation_id,),
+        ).fetchone()
+
+        if conversation is None:
+            raise ValueError("Conversation was not found.")
+
+        cursor = connection.execute(
+            """
+            INSERT INTO conversation_messages (
+                conversation_id,
+                role,
+                content,
+                tool_name
+            )
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                conversation_id,
+                role,
+                content,
+                tool_name,
+            ),
+        )
+
+        # Use the first user message as the conversation title.
+        if role == "user":
+            connection.execute(
+                """
+                UPDATE conversations
+                SET title = CASE
+                    WHEN title = 'New conversation'
+                    THEN ?
+                    ELSE title
+                END,
+                updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (content.strip()[:100], conversation_id),
+            )
+        else:
+            connection.execute(
+                """
+                UPDATE conversations
+                SET updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (conversation_id,),
+            )
+
+        return cursor.lastrowid
+
+
+def get_conversation_messages(conversation_id, limit=None):
+    """Retrieve messages in chronological order."""
+
+    if not isinstance(conversation_id, str) or not conversation_id.strip():
+        raise ValueError("Conversation ID must be a non-empty string.")
+
+    if limit is not None:
+        if type(limit) is not int or limit < 1:
+            raise ValueError("Limit must be a positive integer or None.")
+
+    with get_connection() as connection:
+        connection.row_factory = sqlite3.Row
+
+        conversation = connection.execute(
+            """
+            SELECT id
+            FROM conversations
+            WHERE id = ?
+            """,
+            (conversation_id,),
+        ).fetchone()
+
+        if conversation is None:
+            raise ValueError("Conversation was not found.")
+
+        if limit is None:
+            rows = connection.execute(
+                """
+                SELECT id, conversation_id, role,
+                       content, tool_name, created_at
+                FROM conversation_messages
+                WHERE conversation_id = ?
+                ORDER BY id ASC
+                """,
+                (conversation_id,),
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                """
+                SELECT id, conversation_id, role,
+                       content, tool_name, created_at
+                FROM (
+                    SELECT *
+                    FROM conversation_messages
+                    WHERE conversation_id = ?
+                    ORDER BY id DESC
+                    LIMIT ?
+                )
+                ORDER BY id ASC
+                """,
+                (conversation_id, limit),
+            ).fetchall()
+
+        return [dict(row) for row in rows]
+
+
+def get_all_conversations():
+    """Retrieve conversation summaries, newest first."""
+
+    with get_connection() as connection:
+        connection.row_factory = sqlite3.Row
+
+        rows = connection.execute(
+            """
+            SELECT
+                c.id,
+                c.title,
+                c.created_at,
+                c.updated_at,
+                COUNT(m.id) AS message_count
+            FROM conversations AS c
+            LEFT JOIN conversation_messages AS m
+                ON c.id = m.conversation_id
+            GROUP BY c.id
+            ORDER BY c.updated_at DESC, c.id DESC
+            """
+        ).fetchall()
+
+        return [dict(row) for row in rows]
+
+
+def delete_conversation(conversation_id):
+    """Delete a conversation and its messages."""
+
+    if not isinstance(conversation_id, str) or not conversation_id.strip():
+        raise ValueError("Conversation ID must be a non-empty string.")
+
+    with get_connection() as connection:
+        cursor = connection.execute(
+            """
+            DELETE FROM conversations
+            WHERE id = ?
+            """,
+            (conversation_id,),
+        )
+
+        if cursor.rowcount == 0:
+            raise ValueError("Conversation was not found.")
+
+        return True

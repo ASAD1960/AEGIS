@@ -3,7 +3,10 @@
 AEGIS API
 
 FastAPI application connecting the AEGIS web interface
-to the existing agent engine.
+to the agent engine and persistent conversation memory.
+
+Supports context-aware conversations through SQLite
+and Cloudflare Workers AI.
 """
 
 import os
@@ -22,6 +25,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.agent.agent import Agent
 from app.core.config import APP_NAME, APP_VERSION
+from app.memory.database import (
+    create_conversation,
+    save_conversation_message,
+    get_conversation_messages,
+    get_all_conversations,
+    delete_conversation,
+)
 
 
 # --------------------------------------------------
@@ -39,15 +49,6 @@ app = FastAPI(
 # Frontend communication
 # --------------------------------------------------
 
-# Configure allowed frontend origins through an environment
-# variable. Multiple origins can be separated by commas.
-#
-# Local development default:
-# http://localhost:3000
-#
-# Production example:
-# http://localhost:3000,https://your-aegis.vercel.app
-
 FRONTEND_ORIGINS = [
     origin.strip().rstrip("/")
     for origin in os.getenv(
@@ -61,7 +62,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=FRONTEND_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
 )
 
@@ -99,6 +100,13 @@ class TaskRequest(BaseModel):
         min_length=1,
         max_length=10000,
         description="Natural-language task for AEGIS.",
+    )
+
+    conversation_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=36,
+        description="Existing conversation ID, if continuing a conversation.",
     )
 
 
@@ -143,23 +151,165 @@ def get_registered_tools():
 
 
 # --------------------------------------------------
-# Task execution endpoint
+# Persistent conversation endpoints
+# --------------------------------------------------
+
+@app.get("/api/conversations")
+def list_conversations():
+    """Return all saved conversations."""
+
+    return {
+        "conversations": get_all_conversations(),
+    }
+
+
+@app.get("/api/conversations/{conversation_id}/messages")
+def get_conversation_history(conversation_id: str):
+    """Retrieve messages belonging to one conversation."""
+
+    try:
+
+        messages = get_conversation_messages(
+            conversation_id
+        )
+
+        return {
+            "conversation_id": conversation_id,
+            "messages": messages,
+        }
+
+    except ValueError as error:
+
+        raise HTTPException(
+            status_code=404,
+            detail=str(error),
+        ) from error
+
+
+@app.delete("/api/conversations/{conversation_id}")
+def remove_conversation(conversation_id: str):
+    """Delete a conversation and all its messages."""
+
+    try:
+
+        delete_conversation(conversation_id)
+
+        return {
+            "success": True,
+            "conversation_id": conversation_id,
+            "message": "Conversation deleted successfully.",
+        }
+
+    except ValueError as error:
+
+        raise HTTPException(
+            status_code=404,
+            detail=str(error),
+        ) from error
+
+
+# --------------------------------------------------
+# Task execution and conversation persistence
 # --------------------------------------------------
 
 @app.post("/api/tasks")
 def execute_task(request: TaskRequest):
 
+    conversation_id = request.conversation_id
+
     try:
+
+        # --------------------------------------------------
+        # Step 1: Create or validate the conversation.
+        # --------------------------------------------------
+
+        if conversation_id is None:
+
+            conversation_id = create_conversation()
+
+        else:
+
+            # Verify that the conversation exists.
+            get_conversation_messages(conversation_id)
+
+        # --------------------------------------------------
+        # Step 2: Retrieve previous conversation history.
+        # --------------------------------------------------
+
+        # Retrieve history BEFORE saving the current message.
+        # This prevents the current message from being sent
+        # twice to the language model.
+
+        previous_history = get_conversation_messages(
+            conversation_id,
+            limit=20,
+        )
+
+        # --------------------------------------------------
+        # Step 3: Save the incoming user message.
+        # --------------------------------------------------
+
+        save_conversation_message(
+            conversation_id=conversation_id,
+            role="user",
+            content=request.task,
+        )
+
+        # --------------------------------------------------
+        # Step 4: Execute the AEGIS agent with context.
+        # --------------------------------------------------
 
         with agent_lock:
 
             result = agent.process_request(
-                task=request.task
+                task=request.task,
+                conversation_history=previous_history,
             )
+
+        # --------------------------------------------------
+        # Step 5: Extract the agent response.
+        # --------------------------------------------------
+
+        if not isinstance(result, dict):
+
+            raise RuntimeError(
+                "AEGIS returned an invalid execution result."
+            )
+
+        assistant_content = result.get("result")
+
+        if assistant_content is None:
+
+            assistant_content = str(result)
+
+        elif not isinstance(assistant_content, str):
+
+            assistant_content = str(assistant_content)
+
+        tool_name = result.get("tool_name")
+
+        if not isinstance(tool_name, str):
+            tool_name = None
+
+        # --------------------------------------------------
+        # Step 6: Persist the assistant response.
+        # --------------------------------------------------
+
+        save_conversation_message(
+            conversation_id=conversation_id,
+            role="assistant",
+            content=assistant_content,
+            tool_name=tool_name,
+        )
+
+        # --------------------------------------------------
+        # Step 7: Return the response and conversation ID.
+        # --------------------------------------------------
 
         return {
             "success": True,
             "task": request.task,
+            "conversation_id": conversation_id,
             "execution": result,
         }
 
@@ -211,6 +361,7 @@ async def upload_csv(file: UploadFile = File(...)):
 
         # Validate the file's text encoding.
         try:
+
             contents.decode("utf-8-sig")
 
         except UnicodeDecodeError as error:

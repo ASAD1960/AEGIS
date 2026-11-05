@@ -193,3 +193,144 @@ def test_csv_upload_rejects_invalid_encoding():
     assert response.json()["detail"] == (
         "CSV file must use UTF-8 encoding."
     )
+
+# ==========================================================
+# Persistent conversation API tests.
+# ==========================================================
+
+def test_task_creates_persistent_conversation():
+
+    response = client.post(
+        "/api/tasks",
+        json={
+            "task": "Add 25 and 15",
+        },
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["success"] is True
+    assert isinstance(data["conversation_id"], str)
+    assert len(data["conversation_id"]) == 36
+
+    conversation_id = data["conversation_id"]
+
+    history_response = client.get(
+        f"/api/conversations/{conversation_id}/messages"
+    )
+
+    assert history_response.status_code == 200
+
+    messages = history_response.json()["messages"]
+
+    assert len(messages) == 2
+    assert messages[0]["role"] == "user"
+    assert messages[0]["content"] == "Add 25 and 15"
+    assert messages[1]["role"] == "assistant"
+
+
+def test_task_continues_existing_conversation():
+
+    first_response = client.post(
+        "/api/tasks",
+        json={
+            "task": "Add 10 and 20",
+        },
+    )
+
+    assert first_response.status_code == 200
+
+    conversation_id = first_response.json()["conversation_id"]
+
+    second_response = client.post(
+        "/api/tasks",
+        json={
+            "task": "Add 30 and 40",
+            "conversation_id": conversation_id,
+        },
+    )
+
+    assert second_response.status_code == 200
+
+    assert (
+        second_response.json()["conversation_id"]
+        == conversation_id
+    )
+
+    history_response = client.get(
+        f"/api/conversations/{conversation_id}/messages"
+    )
+
+    messages = history_response.json()["messages"]
+
+    assert len(messages) == 4
+
+    assert messages[0]["content"] == "Add 10 and 20"
+    assert messages[2]["content"] == "Add 30 and 40"
+
+
+def test_conversation_list_endpoint():
+
+    task_response = client.post(
+        "/api/tasks",
+        json={
+            "task": "Add 5 and 5",
+        },
+    )
+
+    conversation_id = task_response.json()["conversation_id"]
+
+    response = client.get("/api/conversations")
+
+    assert response.status_code == 200
+
+    conversations = response.json()["conversations"]
+
+    matching_conversations = [
+        conversation
+        for conversation in conversations
+        if conversation["id"] == conversation_id
+    ]
+
+    assert len(matching_conversations) == 1
+
+    conversation = matching_conversations[0]
+
+    assert conversation["message_count"] == 2
+    assert conversation["title"] == "Add 5 and 5"
+
+
+def test_conversation_delete_endpoint():
+
+    task_response = client.post(
+        "/api/tasks",
+        json={
+            "task": "Add 8 and 12",
+        },
+    )
+
+    conversation_id = task_response.json()["conversation_id"]
+
+    response = client.delete(
+        f"/api/conversations/{conversation_id}"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+
+    history_response = client.get(
+        f"/api/conversations/{conversation_id}/messages"
+    )
+
+    assert history_response.status_code == 404
+
+
+def test_missing_conversation_returns_404():
+
+    response = client.get(
+        "/api/conversations/non-existent-conversation/messages"
+    )
+
+    assert response.status_code == 404

@@ -4,6 +4,9 @@ AEGIS Agent Core
 
 Main agent connecting tools, tool selection,
 task parsing, strategies, execution and feedback.
+
+Supports persistent conversational context through
+conversation history and Cloudflare Workers AI.
 """
 
 import os
@@ -119,6 +122,7 @@ class Agent:
         filter_column=None,
         filter_operator=None,
         filter_value=None,
+        conversation_history=None,
     ):
         """
         Unified entry point for processing user requests.
@@ -127,10 +131,18 @@ class Agent:
         supported tasks to their registered tools.
 
         General questions are handled by the configured
-        language model provider.
+        language model provider with optional conversation history.
 
         CSV requests require file_path. Optional CSV filtering
         arguments are forwarded to the data-analysis tool.
+
+        Args:
+            task: Current user request.
+            file_path: Optional CSV file path.
+            filter_column: Optional CSV filter column.
+            filter_operator: Optional CSV filter operator.
+            filter_value: Optional CSV filter value.
+            conversation_history: Previous conversation messages.
 
         Returns:
             dict: Tool name, arguments and execution result.
@@ -206,7 +218,10 @@ class Agent:
             tool_name = self.select_tool(task)
 
         except ValueError:
-            return self.process_general_chat(task)
+            return self.process_general_chat(
+                task,
+                conversation_history=conversation_history,
+            )
 
         # Route calculation requests.
         if tool_name == "calculator":
@@ -236,12 +251,19 @@ class Agent:
             f"Unsupported task type: {tool_name}"
         )
 
-    def process_general_chat(self, task):
+    def process_general_chat(self, task, conversation_history=None):
         """
         Generate a response using the configured language model.
 
         Cloudflare is the default provider.
         Ollama remains available as a local alternative.
+
+        Args:
+            task: Current user message.
+            conversation_history: Previous conversation messages.
+
+        Returns:
+            dict: Provider information and generated response.
         """
 
         self.status = "Working"
@@ -251,7 +273,14 @@ class Agent:
             if self.llm_provider == "cloudflare":
 
                 client = CloudflareClient()
-                result = client.generate_response(task)
+
+                if conversation_history:
+                    result = client.generate_response(
+                        task,
+                        conversation_history=conversation_history,
+                    )
+                else:
+                    result = client.generate_response(task)
 
                 return {
                     "tool_name": "cloudflare",

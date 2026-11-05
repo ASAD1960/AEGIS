@@ -4,12 +4,17 @@ AEGIS Cloudflare Workers AI Client
 
 Connects AEGIS to a cloud-hosted language model
 through the Cloudflare Workers AI REST API.
+
+Supports bounded conversation history for contextual responses.
 """
 
 import json
 import os
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+
+MAX_HISTORY_MESSAGES = 20
 
 
 class CloudflareClient:
@@ -37,12 +42,54 @@ class CloudflareClient:
         if not self.api_token:
             raise ValueError("Cloudflare API token is missing.")
 
-    def generate_response(self, prompt):
+    @staticmethod
+    def _prepare_history(conversation_history):
+        """
+        Prepare previous conversation messages.
+
+        Only valid user and assistant messages are included.
+        System messages and malformed records are ignored.
+        """
+
+        if conversation_history is None:
+            return []
+
+        if not isinstance(conversation_history, (list, tuple)):
+            raise ValueError(
+                "Conversation history must be a list or tuple."
+            )
+
+        prepared_messages = []
+
+        for message in conversation_history:
+            if not isinstance(message, dict):
+                continue
+
+            role = message.get("role")
+            content = message.get("content")
+
+            if role not in ("user", "assistant"):
+                continue
+
+            if not isinstance(content, str) or not content.strip():
+                continue
+
+            prepared_messages.append(
+                {
+                    "role": role,
+                    "content": content.strip(),
+                }
+            )
+
+        return prepared_messages[-MAX_HISTORY_MESSAGES:]
+
+    def generate_response(self, prompt, conversation_history=None):
         """
         Generate a response using Cloudflare Workers AI.
 
         Args:
-            prompt: User's message.
+            prompt: Current user's message.
+            conversation_history: Optional previous user/assistant messages.
 
         Returns:
             str: Model-generated response.
@@ -51,26 +98,39 @@ class CloudflareClient:
         if not isinstance(prompt, str) or not prompt.strip():
             raise ValueError("Prompt cannot be empty.")
 
+        history = self._prepare_history(conversation_history)
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are AEGIS, a helpful and reliable "
+                    "AI assistant. Give clear, accurate, "
+                    "and useful answers. Use previous conversation "
+                    "messages when relevant to understand context "
+                    "and maintain continuity. Never invent memories "
+                    "or claim to remember information that is not "
+                    "present in the supplied conversation."
+                ),
+            }
+        ]
+
+        messages.extend(history)
+
+        messages.append(
+            {
+                "role": "user",
+                "content": prompt.strip(),
+            }
+        )
+
         url = (
             "https://api.cloudflare.com/client/v4/accounts/"
             f"{self.account_id}/ai/run/{self.model}"
         )
 
         payload = {
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are AEGIS, a helpful and reliable "
-                        "AI assistant. Give clear, accurate, "
-                        "and useful answers."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": prompt.strip(),
-                },
-            ]
+            "messages": messages
         }
 
         request = Request(

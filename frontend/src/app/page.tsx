@@ -18,23 +18,22 @@ type Message = {
   toolName?: string;
 };
 
+type Conversation = {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+};
+
 const API_URL = (
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 ).replace(/\/+$/, "");
 
 function Mark({ small = false }: { small?: boolean }) {
   return (
-    <div
-      className={`flex shrink-0 items-center justify-center rounded-xl bg-[#625CE5] text-white ${
-        small ? "h-9 w-9" : "h-11 w-11"
-      }`}
-    >
-      <svg
-        viewBox="0 0 32 32"
-        className={small ? "h-5 w-5" : "h-6 w-6"}
-        fill="none"
-        aria-hidden="true"
-      >
+    <div className={`aegis-mark ${small ? "aegis-mark-small" : ""}`}>
+      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
         <path
           d="M16 3 27 9v14l-11 6L5 23V9L16 3Z"
           stroke="currentColor"
@@ -66,7 +65,8 @@ function Icon({
     | "calculator"
     | "text"
     | "terminal"
-    | "chevron";
+    | "chevron"
+    | "trash";
   size?: number;
 }) {
   const common = {
@@ -84,13 +84,10 @@ function Icon({
   switch (name) {
     case "plus":
       return <svg {...common}><path d="M12 5v14M5 12h14" /></svg>;
-
     case "menu":
       return <svg {...common}><path d="M4 7h16M4 12h16M4 17h16" /></svg>;
-
     case "arrow":
       return <svg {...common}><path d="M12 19V5M5 12l7-7 7 7" /></svg>;
-
     case "refresh":
       return (
         <svg {...common}>
@@ -98,17 +95,14 @@ function Icon({
           <path d="M5.5 9A7 7 0 0 1 18 6l2 6M4 12l2 6a7 7 0 0 0 12.5-3" />
         </svg>
       );
-
     case "message":
       return (
         <svg {...common}>
           <path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 8.7 3.9a8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5Z" />
         </svg>
       );
-
     case "close":
       return <svg {...common}><path d="m18 6-12 12M6 6l12 12" /></svg>;
-
     case "spark":
       return (
         <svg {...common}>
@@ -116,7 +110,6 @@ function Icon({
           <path d="m19 14 .9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9L19 14Z" />
         </svg>
       );
-
     case "calculator":
       return (
         <svg {...common}>
@@ -124,23 +117,19 @@ function Icon({
           <path d="M8 7h8M8 12h2m4 0h2M8 16h2m4 0h2" />
         </svg>
       );
-
     case "text":
-      return (
-        <svg {...common}>
-          <path d="M4 6h16M4 10h16M4 14h10M4 18h8" />
-        </svg>
-      );
-
+      return <svg {...common}><path d="M4 6h16M4 10h16M4 14h10M4 18h8" /></svg>;
     case "terminal":
-      return (
-        <svg {...common}>
-          <path d="m4 7 5 5-5 5M12 17h8" />
-        </svg>
-      );
-
+      return <svg {...common}><path d="m4 7 5 5-5 5M12 17h8" /></svg>;
     case "chevron":
       return <svg {...common}><path d="m9 18 6-6-6-6" /></svg>;
+    case "trash":
+      return (
+        <svg {...common}>
+          <path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6" />
+          <path d="M10 11v5m4-5v5" />
+        </svg>
+      );
   }
 }
 
@@ -152,35 +141,22 @@ function StatusIndicator({ state }: { state: ApiState }) {
   };
 
   return (
-    <span className="inline-flex items-center gap-2 text-xs text-[#777B8C]">
-      <span
-        className={`h-2 w-2 rounded-full ${
-          state === "online"
-            ? "bg-[#25845D]"
-            : state === "checking"
-              ? "animate-pulse bg-[#B77926]"
-              : "bg-[#C45F64]"
-        }`}
-      />
+    <span className={`aegis-status aegis-status-${state}`}>
+      <span className="aegis-status-dot" />
       {labels[state]}
     </span>
   );
 }
 
 function readMessage(payload: unknown): string {
-  if (typeof payload === "string") {
-    return payload;
-  }
+  if (typeof payload === "string") return payload;
 
   if (payload && typeof payload === "object") {
     const record = payload as Record<string, unknown>;
 
     if (record.execution && typeof record.execution === "object") {
       const execution = record.execution as Record<string, unknown>;
-
-      if (execution.result !== undefined) {
-        return readMessage(execution.result);
-      }
+      if (execution.result !== undefined) return readMessage(execution.result);
     }
 
     for (const key of [
@@ -194,10 +170,7 @@ function readMessage(payload: unknown): string {
     ]) {
       const value = record[key];
 
-      if (typeof value === "string" && value.trim()) {
-        return value;
-      }
-
+      if (typeof value === "string" && value.trim()) return value;
       if (value && typeof value === "object") {
         return JSON.stringify(value, null, 2);
       }
@@ -210,12 +183,9 @@ function readMessage(payload: unknown): string {
 }
 
 function readToolName(payload: unknown): string | undefined {
-  if (!payload || typeof payload !== "object") {
-    return undefined;
-  }
+  if (!payload || typeof payload !== "object") return undefined;
 
   const record = payload as Record<string, unknown>;
-
   const execution = record.execution;
 
   if (execution && typeof execution === "object") {
@@ -229,29 +199,42 @@ function readToolName(payload: unknown): string | undefined {
     }
   }
 
-  if (typeof record.tool_name === "string") {
-    return record.tool_name;
-  }
-
-  if (typeof record.tool === "string") {
-    return record.tool;
-  }
+  if (typeof record.tool_name === "string") return record.tool_name;
+  if (typeof record.tool === "string") return record.tool;
 
   return undefined;
+}
+
+async function readApiPayload(response: Response): Promise<unknown> {
+  const responseText = await response.text();
+
+  try {
+    return JSON.parse(responseText);
+  } catch {
+    return responseText;
+  }
 }
 
 export default function Home() {
   const [apiState, setApiState] = useState<ApiState>("checking");
   const [tools, setTools] = useState<Tool[]>([]);
   const [version, setVersion] = useState("—");
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // Persistent conversation state.
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [deletingConversationId, setDeletingConversationId] = useState<
+    string | null
+  >(null);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
   const messageIdPrefix = useId();
   const messageCounterRef = useRef(0);
 
@@ -259,6 +242,10 @@ export default function Home() {
     messageCounterRef.current += 1;
     return `${messageIdPrefix}-message-${messageCounterRef.current}`;
   }, [messageIdPrefix]);
+
+  // --------------------------------------------------
+  // Backend connection
+  // --------------------------------------------------
 
   const checkBackend = useCallback(async () => {
     try {
@@ -327,6 +314,168 @@ export default function Home() {
     };
   }, [checkBackend]);
 
+  // --------------------------------------------------
+  // Conversation history
+  // --------------------------------------------------
+
+  const loadConversations = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/conversations`, {
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error("Unable to retrieve conversations.");
+      }
+
+      const payload = await response.json();
+
+      const items = Array.isArray(payload?.conversations)
+        ? payload.conversations
+        : [];
+
+      setConversations(items);
+    } catch (error) {
+      console.error("Conversation history error:", error);
+    }
+  }, []);
+
+useEffect(() => {
+  const timer = window.setTimeout(() => {
+    void loadConversations();
+  }, 0);
+
+  return () => {
+    window.clearTimeout(timer);
+  };
+}, [loadConversations]);
+
+  const openConversation = useCallback(
+    async (id: string) => {
+      if (isSending || isLoadingHistory) return;
+
+      if (id === conversationId) {
+        setMobileOpen(false);
+        return;
+      }
+
+      setIsLoadingHistory(true);
+
+      try {
+        const response = await fetch(
+          `${API_URL}/api/conversations/${id}/messages`,
+          { cache: "no-store" },
+        );
+
+        const payload = await readApiPayload(response);
+
+        if (!response.ok) {
+          throw new Error(readMessage(payload));
+        }
+
+        if (!payload || typeof payload !== "object") {
+          throw new Error("The API returned an invalid conversation.");
+        }
+
+        const record = payload as Record<string, unknown>;
+        const history = Array.isArray(record.messages)
+          ? record.messages
+          : [];
+
+        const restoredMessages: Message[] = history.map(
+          (item: unknown) => {
+            const message =
+              item && typeof item === "object"
+                ? (item as Record<string, unknown>)
+                : {};
+
+            return {
+              id:
+                message.id !== undefined
+                  ? String(message.id)
+                  : createMessageId(),
+              role: message.role === "user" ? "user" : "assistant",
+              content:
+                typeof message.content === "string"
+                  ? message.content
+                  : "",
+              toolName:
+                typeof message.tool_name === "string"
+                  ? message.tool_name
+                  : undefined,
+            };
+          },
+        );
+
+        setMessages(restoredMessages);
+        setConversationId(id);
+        setDraft("");
+        setMobileOpen(false);
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unable to open this conversation.";
+
+        window.alert(message);
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    },
+    [conversationId, createMessageId, isLoadingHistory, isSending],
+  );
+
+  const deleteConversation = useCallback(
+    async (id: string) => {
+      if (isSending || deletingConversationId) return;
+
+      const confirmed = window.confirm(
+        "Are you sure you want to permanently delete this conversation?",
+      );
+
+      if (!confirmed) return;
+
+      setDeletingConversationId(id);
+
+      try {
+        const response = await fetch(
+          `${API_URL}/api/conversations/${id}`,
+          { method: "DELETE" },
+        );
+
+        const payload = await readApiPayload(response);
+
+        if (!response.ok) {
+          throw new Error(readMessage(payload));
+        }
+
+        setConversations((current) =>
+          current.filter((conversation) => conversation.id !== id),
+        );
+
+        if (conversationId === id) {
+          setConversationId(null);
+          setMessages([]);
+          setDraft("");
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unable to delete this conversation.";
+
+        window.alert(message);
+      } finally {
+        setDeletingConversationId(null);
+      }
+    },
+    [conversationId, deletingConversationId, isSending],
+  );
+
+  // --------------------------------------------------
+  // Chat behavior
+  // --------------------------------------------------
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isSending]);
@@ -334,7 +483,7 @@ export default function Home() {
   async function handleSend(text?: string) {
     const content = (text ?? draft).trim();
 
-    if (!content || isSending) return;
+    if (!content || isSending || isLoadingHistory) return;
 
     const userMessage: Message = {
       id: createMessageId(),
@@ -353,21 +502,14 @@ export default function Home() {
     try {
       const response = await fetch(`${API_URL}/api/tasks`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ task: content }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          task: content,
+          conversation_id: conversationId,
+        }),
       });
 
-      const responseText = await response.text();
-
-      let payload: unknown;
-
-      try {
-        payload = JSON.parse(responseText);
-      } catch {
-        payload = responseText;
-      }
+      const payload = await readApiPayload(response);
 
       if (!response.ok) {
         throw new Error(
@@ -376,14 +518,30 @@ export default function Home() {
         );
       }
 
-      const assistantMessage: Message = {
-        id: createMessageId(),
-        role: "assistant",
-        content: readMessage(payload),
-        toolName: readToolName(payload),
-      };
+      // Keep the conversation ID returned by the backend.
+      if (
+        payload &&
+        typeof payload === "object" &&
+        typeof (payload as Record<string, unknown>).conversation_id ===
+          "string"
+      ) {
+        setConversationId(
+          (payload as Record<string, unknown>).conversation_id as string,
+        );
+      }
 
-      setMessages((current) => [...current, assistantMessage]);
+      setMessages((current) => [
+        ...current,
+        {
+          id: createMessageId(),
+          role: "assistant",
+          content: readMessage(payload),
+          toolName: readToolName(payload),
+        },
+      ]);
+
+      // Refresh sidebar history after the response is saved.
+      void loadConversations();
     } catch (error) {
       const errorMessage =
         error instanceof Error
@@ -406,6 +564,9 @@ export default function Home() {
   }
 
   function handleNewChat() {
+    if (isSending || isLoadingHistory) return;
+
+    setConversationId(null);
     setMessages([]);
     setDraft("");
     setMobileOpen(false);
@@ -419,12 +580,17 @@ export default function Home() {
     }
   }
 
+  // --------------------------------------------------
+  // Suggested starting prompts
+  // --------------------------------------------------
+
   const suggestions = [
     {
       title: "Perform a calculation",
-      description: "Ask AEGIS to solve a mathematical task.",
+      description: "Solve mathematical problems with the calculator tool.",
       prompt: "Calculate 245 multiplied by 18.",
       icon: "calculator" as const,
+      number: "01",
     },
     {
       title: "Analyze some text",
@@ -432,125 +598,238 @@ export default function Home() {
       prompt:
         "Analyze this text: AEGIS is an intelligent agent that combines tools, memory and structured execution.",
       icon: "text" as const,
+      number: "02",
     },
     {
       title: "Explore capabilities",
-      description: "Discover the tools currently available.",
+      description: "Discover the tools currently available to AEGIS.",
       prompt: "What tools and capabilities are currently available to you?",
       icon: "terminal" as const,
+      number: "03",
     },
   ];
 
+  // --------------------------------------------------
+  // Interface
+  // --------------------------------------------------
+
   return (
-    <main className="flex h-dvh min-h-[560px] overflow-hidden bg-[#F7F8FC] text-[#242638]">
+    <main className="aegis-shell">
       {mobileOpen && (
         <button
           aria-label="Close navigation"
           onClick={() => setMobileOpen(false)}
-          className="fixed inset-0 z-30 bg-[#242638]/25 backdrop-blur-[2px] lg:hidden"
+          className="aegis-mobile-overlay"
         />
       )}
 
-      {/* Sidebar */}
-      <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-[276px] shrink-0 flex-col border-r border-[#E7E9F1] bg-white transition-transform duration-200 lg:static lg:translate-x-0 ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <div className="flex h-[82px] shrink-0 items-center justify-between border-b border-[#E7E9F1] px-6">
-          <div className="flex items-center gap-3">
+      <aside className={`aegis-sidebar ${mobileOpen ? "is-open" : ""}`}>
+        <div className="aegis-brand">
+          <div className="aegis-brand-lockup">
             <Mark />
             <div>
-              <div className="text-[17px] font-bold tracking-[0.17em] text-[#242638]">
-                AEGIS
-              </div>
-              <div className="mt-0.5 text-[10px] font-medium tracking-[0.04em] text-[#999CAD]">
-                Intelligence workspace
+              <div className="aegis-brand-name">AEGIS</div>
+              <div className="aegis-brand-caption">
+                INTELLIGENCE PLATFORM
               </div>
             </div>
           </div>
 
           <button
             onClick={() => setMobileOpen(false)}
-            className="rounded-lg p-2 text-[#777B8C] transition hover:bg-[#F1F2F9] lg:hidden"
+            className="aegis-icon-button aegis-mobile-close"
             aria-label="Close menu"
           >
             <Icon name="close" />
           </button>
         </div>
 
-        <div className="px-5 py-5">
+        <div className="aegis-sidebar-actions">
           <button
             onClick={handleNewChat}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#625CE5] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:bg-[#514ACB]"
+            disabled={isSending || isLoadingHistory}
+            className="aegis-primary-button"
           >
-            <Icon name="plus" size={16} />
-            New conversation
+            <Icon name="plus" size={18} />
+            <span>New conversation</span>
           </button>
         </div>
 
-        <div className="px-5">
-          <div className="mb-3 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#999CAD]">
-            Workspace
-          </div>
-
-          <div className="flex items-center gap-3 rounded-xl border border-[#EAE5FA] bg-[#F0EEFF] px-3.5 py-3 text-[13px] font-semibold text-[#514ACB]">
-            <Icon name="message" size={17} />
+        <div className="aegis-sidebar-section">
+          <div className="aegis-section-label">WORKSPACE</div>
+          <div className="aegis-nav-active">
+            <Icon name="message" size={18} />
             <span>AI assistant</span>
-            <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[#625CE5]" />
+            <span className="aegis-nav-indicator" />
           </div>
         </div>
 
-        <div className="mt-9 min-h-0 flex-1 overflow-y-auto px-5">
-          <div className="mb-3 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#999CAD]">
-            Registered tools
-          </div>
+        <div className="aegis-sidebar-scroll">
+          {/* Recent conversations */}
+
+          <section className="aegis-history-section">
+            <div className="aegis-section-label aegis-history-heading">
+              <span>RECENT CONVERSATIONS</span>
+              <button
+                type="button"
+                onClick={() => void loadConversations()}
+                disabled={isLoadingHistory}
+                title="Refresh conversation history"
+                aria-label="Refresh conversation history"
+                className="aegis-history-refresh"
+              >
+                <Icon name="refresh" size={14} />
+              </button>
+            </div>
+
+            {isLoadingHistory ? (
+              <div className="aegis-empty-tools">
+                <p>Loading conversation...</p>
+              </div>
+            ) : conversations.length > 0 ? (
+              <div className="aegis-conversation-list">
+                {conversations.map((conversation) => (
+                  <div
+                    key={conversation.id}
+                    className={`aegis-history-item ${
+                      conversation.id === conversationId
+                        ? "is-active"
+                        : ""
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void openConversation(conversation.id)
+                      }
+                      disabled={isSending || isLoadingHistory}
+                      className="aegis-history-open"
+                      title={conversation.title}
+                    >
+                      <Icon name="message" size={15} />
+                      <span>{conversation.title || "New conversation"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void deleteConversation(conversation.id)
+                      }
+                      disabled={
+                        isSending ||
+                        deletingConversationId !== null
+                      }
+                      className="aegis-history-delete"
+                      title="Delete conversation"
+                      aria-label={`Delete ${conversation.title}`}
+                    >
+                      {deletingConversationId === conversation.id ? (
+                        <span className="aegis-delete-loading">...</span>
+                      ) : (
+                        <Icon name="trash" size={15} />
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="aegis-empty-tools">
+                <p>No saved conversations yet.</p>
+                <span>Your conversations will appear here.</span>
+              </div>
+            )}
+          </section>
+
+          {/* Explore AEGIS */}
+
+          <section className="aegis-sidebar-explore">
+            <div className="aegis-suggestions-heading">
+              <div className="aegis-suggestions-icon">
+                <Icon name="spark" size={17} />
+              </div>
+              <div>
+                <div className="aegis-suggestions-title">Explore AEGIS</div>
+                <div className="aegis-suggestions-subtitle">
+                  Choose a starting point for your conversation
+                </div>
+              </div>
+            </div>
+
+            <div className="aegis-suggestions">
+              {suggestions.map((item) => (
+                <button
+                  key={item.title}
+                  onClick={() => {
+                    setMobileOpen(false);
+                    void handleSend(item.prompt);
+                  }}
+                  disabled={isSending || isLoadingHistory}
+                  className="aegis-suggestion-card"
+                >
+                  <div className="aegis-card-top">
+                    <div className="aegis-card-icon">
+                      <Icon name={item.icon} size={21} />
+                    </div>
+                    <span className="aegis-card-number">{item.number}</span>
+                  </div>
+
+                  <div className="aegis-card-title">{item.title}</div>
+                  <p className="aegis-card-description">
+                    {item.description}
+                  </p>
+
+                  <div className="aegis-card-action">
+                    Explore
+                    <Icon name="chevron" size={16} />
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {/* Registered tools */}
+
+          <div className="aegis-section-label">REGISTERED TOOLS</div>
 
           {apiState === "online" && tools.length > 0 ? (
-            <div className="space-y-1">
+            <div className="aegis-tool-list">
               {tools.map((tool) => (
                 <div
                   key={tool.name}
                   title={tool.description}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-[12px] text-[#777B8C] transition hover:bg-[#F7F8FC]"
+                  className="aegis-tool"
                 >
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#25845D]" />
-                  <span className="truncate">
-                    {tool.name.replace(/_/g, " ")}
-                  </span>
+                  <span className="aegis-tool-dot" />
+                  <span>{tool.name.replace(/_/g, " ")}</span>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-[#E7E9F1] bg-[#FAFAFD] px-3.5 py-4">
-              <p className="text-[12px] font-medium text-[#777B8C]">
+            <div className="aegis-empty-tools">
+              <p>
                 {apiState === "checking"
                   ? "Checking registered tools..."
                   : "No live tools available"}
               </p>
-              <p className="mt-1.5 text-[11px] leading-5 text-[#999CAD]">
+              <span>
                 {apiState === "offline"
-                  ? "Start the local API to retrieve your registered tools."
-                  : "Registered capabilities will appear here."}
-              </p>
+                  ? "Start the API to retrieve your registered tools."
+                  : "Your available capabilities will appear here."}
+              </span>
             </div>
           )}
 
-          <div className="mt-8 border-t border-[#E7E9F1] pt-6">
-            <div className="mb-3 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#999CAD]">
-              System information
-            </div>
+          {/* System information */}
 
-            <div className="flex items-center justify-between gap-2 px-2 py-2.5 text-[11px]">
-              <span className="text-[#777B8C]">API version</span>
-              <span className="font-mono text-[10px] text-[#999CAD]">
-                {version}
-              </span>
+          <div className="aegis-system-info">
+            <div className="aegis-section-label">SYSTEM INFORMATION</div>
+            <div className="aegis-info-row">
+              <span>API version</span>
+              <span className="aegis-mono">{version}</span>
             </div>
-
-            <div className="flex items-center justify-between px-2 py-2.5 text-[11px]">
-              <span className="text-[#777B8C]">Environment</span>
-              <span className="text-[#777B8C]">
+            <div className="aegis-info-row">
+              <span>Environment</span>
+              <span>
                 {process.env.NODE_ENV === "production"
                   ? "Production"
                   : "Local"}
@@ -559,233 +838,182 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="shrink-0 border-t border-[#E7E9F1] px-5 py-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#EAE5FA] bg-[#F0EEFF] text-[12px] font-semibold text-[#625CE5]">
-              AY
-            </div>
-            <div className="min-w-0">
-              <div className="text-[12px] font-semibold text-[#242638]">
-                Asad Yar
-              </div>
-              <div className="mt-0.5 text-[10px] text-[#999CAD]">
+        {/* User profile */}
+
+        <div className="aegis-profile">
+          <div className="aegis-profile-row">
+            <div className="aegis-avatar">AY</div>
+            <div>
+              <div className="aegis-profile-name">Asad Yar</div>
+              <div className="aegis-profile-caption">
                 Personal workspace
               </div>
             </div>
           </div>
-          <div className="mt-5 text-[9px] text-[#B0B2C0]">
-            © 2026 AEGIS · Asad Yar
-          </div>
+          <div className="aegis-copyright">© 2026 AEGIS · Asad Yar</div>
         </div>
       </aside>
 
       {/* Main workspace */}
-      <section className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-[72px] shrink-0 items-center justify-between border-b border-[#E7E9F1] bg-white/90 px-4 sm:px-7">
-          <div className="flex min-w-0 items-center gap-3">
+
+      <section className="aegis-main">
+        <header className="aegis-header">
+          <div className="aegis-header-left">
             <button
               onClick={() => setMobileOpen(true)}
               aria-label="Open navigation"
-              className="rounded-lg p-2 text-[#777B8C] transition hover:bg-[#F1F2F9] lg:hidden"
+              className="aegis-icon-button aegis-mobile-menu"
             >
-              <Icon name="menu" />
+              <Icon name="menu" size={21} />
             </button>
 
-            <div className="min-w-0">
-              <div className="text-[13px] font-semibold text-[#242638]">
-                AI assistant
-              </div>
-              <div className="mt-0.5 text-[11px] text-[#999CAD]">
-                Your intelligent workspace
+            <div>
+              <div className="aegis-header-title">AI assistant</div>
+              <div className="aegis-header-subtitle">
+                {conversationId
+                  ? "Saved conversation"
+                  : "Your intelligent workspace"}
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 sm:gap-5">
+          <div className="aegis-header-right">
             <StatusIndicator state={apiState} />
-
-            <div className="h-5 w-px bg-[#E7E9F1]" />
-
+            <div className="aegis-header-divider" />
             <button
               onClick={handleRefresh}
               disabled={apiState === "checking"}
               title="Refresh backend connection"
               aria-label="Refresh backend connection"
-              className="rounded-lg border border-[#E7E9F1] p-2.5 text-[#777B8C] transition hover:border-[#D9DCE8] hover:bg-[#F7F8FC] disabled:cursor-not-allowed disabled:opacity-50"
+              className="aegis-icon-button aegis-refresh-button"
             >
-              <Icon name="refresh" size={16} />
+              <Icon name="refresh" size={18} />
             </button>
           </div>
         </header>
 
-        {/* Conversation */}
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex-1 overflow-y-auto px-4 sm:px-8">
-            <div className="mx-auto flex min-h-full w-full max-w-[900px] flex-col">
-              {messages.length === 0 ? (
-                <div className="flex flex-1 flex-col justify-center pb-12 pt-10">
-                  <div className="mb-8 flex items-center gap-3">
-                    <Mark />
-                    <div>
-                      <div className="text-[12px] font-semibold uppercase tracking-[0.13em] text-[#625CE5]">
-                        AEGIS intelligence
-                      </div>
-                      <div className="mt-1 text-[11px] text-[#999CAD]">
-                        Your workspace is ready
-                      </div>
+        <div className="aegis-conversation">
+          <div className="aegis-content">
+            {messages.length === 0 ? (
+              <div className="aegis-welcome">
+                <div className="aegis-welcome-label">
+                  <Mark />
+                  <div>
+                    <div className="aegis-eyebrow">
+                      AEGIS INTELLIGENCE
+                    </div>
+                    <div className="aegis-welcome-caption">
+                      Your workspace is ready
                     </div>
                   </div>
-
-                  <h1 className="max-w-[700px] text-[40px] font-semibold leading-[1.12] tracking-[-0.045em] text-[#242638] sm:text-[58px]">
-                    Hello, I&apos;m{" "}
-                    <span className="text-[#625CE5]">AEGIS.</span>
-                  </h1>
-
-                  <p className="mt-5 max-w-[530px] text-[14px] leading-7 text-[#777B8C] sm:text-[15px]">
-                    Your intelligent learning companion. Ready to think, learn
-                    and assist.
-                  </p>
-
-                  <div className="mt-12">
-                    <div className="mb-4 flex items-center gap-2">
-                      <Icon name="spark" size={15} />
-                      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#999CAD]">
-                        Start with an idea
-                      </span>
-                    </div>
-
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      {suggestions.map((item) => (
-                        <button
-                          key={item.title}
-                          onClick={() => void handleSend(item.prompt)}
-                          disabled={isSending}
-                          className="group rounded-2xl border border-[#E7E9F1] bg-white p-5 text-left transition duration-200 hover:-translate-y-0.5 hover:border-[#CFC6F5] hover:shadow-[0_12px_32px_rgba(61,54,130,0.07)] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F0EEFF] text-[#625CE5] transition group-hover:bg-[#EAE5FA]">
-                            <Icon name={item.icon} size={18} />
-                          </div>
-
-                          <div className="mt-5 text-[13px] font-semibold text-[#242638]">
-                            {item.title}
-                          </div>
-
-                          <p className="mt-2 text-[11px] leading-5 text-[#999CAD]">
-                            {item.description}
-                          </p>
-
-                          <div className="mt-5 flex items-center gap-1 text-[11px] font-semibold text-[#625CE5]">
-                            Try this
-                            <Icon name="chevron" size={13} />
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {apiState === "offline" && (
-                    <div className="mt-8 flex items-start gap-3 rounded-xl border border-[#F0DFDC] bg-[#FFF9F7] p-4">
-                      <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#C45F64]" />
-                      <div>
-                        <div className="text-[12px] font-semibold text-[#9C5558]">
-                          Backend is not connected
-                        </div>
-                        <p className="mt-1 text-[11px] leading-5 text-[#A47C7B]">
-                          Start your FastAPI server in the project terminal to
-                          execute tasks through AEGIS.
-                        </p>
-                      </div>
-                    </div>
-                  )}
                 </div>
-              ) : (
-                <div className="flex-1 space-y-9 py-9">
-                  {messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`flex gap-3 sm:gap-4 ${
-                        message.role === "user"
-                          ? "justify-end"
-                          : "justify-start"
-                      }`}
-                    >
-                      {message.role === "assistant" && <Mark small />}
 
+                <h1 className="aegis-hero-title">
+                  Think beyond.
+                  <br />
+                  <span>Work smarter with AEGIS.</span>
+                </h1>
+
+                <p className="aegis-hero-description">
+                  An intelligent agent built to reason, use tools, and help you
+                  turn ideas into meaningful outcomes.
+                </p>
+
+                {apiState === "offline" && (
+                  <div className="aegis-offline-notice">
+                    <span className="aegis-offline-dot" />
+                    <div>
+                      <strong>Backend is not connected</strong>
+                      <p>
+                        Start your FastAPI server to execute tasks through
+                        AEGIS.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="aegis-messages">
+                {messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`aegis-message-row ${
+                      message.role === "user"
+                        ? "is-user"
+                        : "is-assistant"
+                    }`}
+                  >
+                    {message.role === "assistant" && <Mark small />}
+
+                    <div className="aegis-message-column">
                       <div
-                        className={`min-w-0 max-w-[88%] sm:max-w-[78%] ${
-                          message.role === "user" ? "order-first" : ""
+                        className={`aegis-message-author ${
+                          message.role === "user" ? "user-author" : ""
                         }`}
                       >
-                        <div
-                          className={`mb-2 text-[11px] font-semibold ${
-                            message.role === "user"
-                              ? "text-right text-[#999CAD]"
-                              : "text-[#625CE5]"
-                          }`}
-                        >
-                          {message.role === "user" ? "You" : "AEGIS"}
-                        </div>
-
-                        <div
-                          className={`rounded-2xl px-4 py-3.5 text-[13px] leading-7 sm:px-5 ${
-                            message.role === "user"
-                              ? "rounded-tr-sm bg-[#EAE5FA] text-[#39345D]"
-                              : message.isError
-                                ? "rounded-tl-sm border border-[#F0DFDC] bg-[#FFF9F7] text-[#925D59]"
-                                : "rounded-tl-sm border border-[#E7E9F1] bg-white text-[#424456]"
-                          }`}
-                        >
-                          <div className="whitespace-pre-wrap break-words">
-                            {message.content}
-                          </div>
-                        </div>
-
-                        {message.toolName && (
-                          <div className="mt-2 text-[10px] text-[#999CAD]">
-                            Executed with {message.toolName.replace(/_/g, " ")}
-                          </div>
-                        )}
+                        {message.role === "user" ? "YOU" : "AEGIS"}
                       </div>
 
-                      {message.role === "user" && (
-                        <div className="mt-7 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#EAE5FA] bg-white text-[11px] font-semibold text-[#625CE5]">
-                          AY
+                      <div
+                        className={`aegis-message-bubble ${
+                          message.role === "user"
+                            ? "aegis-user-bubble"
+                            : message.isError
+                              ? "aegis-error-bubble"
+                              : "aegis-assistant-bubble"
+                        }`}
+                      >
+                        <div className="whitespace-pre-wrap wrap-break-words">
+                          {message.content}
+                        </div>
+                      </div>
+
+                      {message.toolName && (
+                        <div className="aegis-tool-execution">
+                          <span className="aegis-tool-dot" />
+                          Executed with{" "}
+                          {message.toolName.replace(/_/g, " ")}
                         </div>
                       )}
                     </div>
-                  ))}
 
-                  {isSending && (
-                    <div className="flex items-start gap-3">
-                      <Mark small />
-                      <div className="rounded-2xl rounded-tl-sm border border-[#E7E9F1] bg-white px-5 py-4">
-                        <div className="flex items-center gap-2">
-                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#625CE5]" />
-                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#625CE5] [animation-delay:120ms]" />
-                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#625CE5] [animation-delay:240ms]" />
-                          <span className="ml-2 text-[11px] text-[#999CAD]">
-                            AEGIS is working
-                          </span>
-                        </div>
+                    {message.role === "user" && (
+                      <div className="aegis-avatar aegis-message-avatar">
+                        AY
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
+                ))}
 
-                  <div ref={bottomRef} />
-                </div>
-              )}
-            </div>
+                {isSending && (
+                  <div className="aegis-message-row is-assistant">
+                    <Mark small />
+                    <div className="aegis-thinking">
+                      <div className="aegis-thinking-dots">
+                        <span />
+                        <span />
+                        <span />
+                      </div>
+                      <span>AEGIS is working</span>
+                    </div>
+                  </div>
+                )}
+
+                <div ref={bottomRef} />
+              </div>
+            )}
           </div>
 
-          {/* Composer */}
-          <div className="shrink-0 border-t border-[#E7E9F1] bg-white px-4 pb-4 pt-4 sm:px-8 sm:pb-6">
-            <div className="mx-auto max-w-[900px]">
+          {/* Message composer */}
+
+          <div className="aegis-composer-area">
+            <div className="aegis-composer-wrap">
               <form
                 onSubmit={(event) => {
                   event.preventDefault();
                   void handleSend();
                 }}
-                className="rounded-2xl border border-[#D9DCE8] bg-white shadow-[0_5px_24px_rgba(36,38,56,0.045)] transition focus-within:border-[#B7B0F0] focus-within:shadow-[0_5px_28px_rgba(98,92,229,0.09)]"
+                className="aegis-composer"
               >
                 <textarea
                   ref={textareaRef}
@@ -793,17 +1021,23 @@ export default function Home() {
                   onChange={(event) => {
                     setDraft(event.target.value);
                     event.target.style.height = "auto";
-                    event.target.style.height = `${Math.min(event.target.scrollHeight, 160)}px`;
+                    event.target.style.height = `${Math.min(
+                      event.target.scrollHeight,
+                      160,
+                    )}px`;
                   }}
                   onKeyDown={handleKeyDown}
                   rows={1}
-                  placeholder="Ask AEGIS anything..."
+                  placeholder="Message AEGIS..."
                   aria-label="Message AEGIS"
-                  className="block max-h-40 min-h-[58px] w-full resize-none bg-transparent px-5 pb-2 pt-4 text-[13px] leading-6 text-[#242638] outline-none placeholder:text-[#B0B2C0]"
+                  className="aegis-textarea"
                 />
 
-                <div className="flex items-center justify-between px-3 pb-3">
-                  <div className="flex items-center gap-2 pl-2 text-[10px] text-[#999CAD]">
+                <div className="aegis-composer-footer">
+                  <div className="aegis-composer-hint">
+                    <span className="aegis-composer-spark">
+                      <Icon name="spark" size={14} />
+                    </span>
                     <span className="hidden sm:inline">
                       Enter to send · Shift + Enter for a new line
                     </span>
@@ -812,17 +1046,21 @@ export default function Home() {
 
                   <button
                     type="submit"
-                    disabled={!draft.trim() || isSending}
+                    disabled={
+                      !draft.trim() || isSending || isLoadingHistory
+                    }
                     aria-label="Send message"
-                    className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#625CE5] text-white transition hover:bg-[#514ACB] disabled:cursor-not-allowed disabled:bg-[#E7E9F1] disabled:text-[#999CAD]"
+                    className="aegis-send-button"
                   >
-                    <Icon name="arrow" size={17} />
+                    <Icon name="arrow" size={20} />
                   </button>
                 </div>
               </form>
 
-              <div className="mt-3 flex items-center justify-between gap-3 text-[10px] text-[#B0B2C0]">
-                <span>AEGIS can make mistakes. Verify important results.</span>
+              <div className="aegis-footer-note">
+                <span>
+                  AEGIS can make mistakes. Verify important results.
+                </span>
                 <span className="hidden sm:inline">
                   Powered by your configured AEGIS backend
                 </span>
