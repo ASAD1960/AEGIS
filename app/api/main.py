@@ -25,7 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.agent.agent import Agent
 from app.core.config import APP_NAME, APP_VERSION
-from app.memory.database import (
+from app.memory.database_backend import (
     create_conversation,
     save_conversation_message,
     get_conversation_messages,
