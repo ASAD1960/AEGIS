@@ -4,7 +4,7 @@ AEGIS Learning Analyzer
 Analyzes historical feedback and compares strategy performance.
 """
 
-from app.memory.database import get_all_feedback
+from app.memory.database_backend import get_all_feedback
 
 
 class LearningAnalyzer:

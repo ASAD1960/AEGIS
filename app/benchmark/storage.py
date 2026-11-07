@@ -6,7 +6,7 @@ Stores benchmark experiments permanently
 in the SQLite database.
 """
 
-from app.memory.database import save_benchmark_result
+from app.memory.database_backend import save_benchmark_result
 
 
 class BenchmarkStorage:

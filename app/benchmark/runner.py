@@ -27,7 +27,7 @@ import uuid
 from collections import Counter
 from pathlib import Path
 
-from app.memory.database import (
+from app.memory.database_backend import (
     create_research_experiment,
     save_research_case_result,
     save_research_trial_result,
