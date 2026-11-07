@@ -11,7 +11,7 @@ import math
 import random
 from statistics import mean, median
 
-from app.memory.database import (
+from app.memory.database_backend import (
     get_all_benchmark_results,
     get_research_experiment,
     get_research_case_results,

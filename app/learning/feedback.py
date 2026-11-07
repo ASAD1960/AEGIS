@@ -4,7 +4,7 @@ AEGIS Feedback System
 Collects and permanently stores agent feedback.
 """
 
-from app.memory.database import (
+from app.memory.database_backend import (
     initialize_database,
     save_feedback,
     get_all_feedback,
