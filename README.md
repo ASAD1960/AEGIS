@@ -1,378 +1,282 @@
-# AEGIS 
+# AEGIS — Self-Learning AI Agent
 
-**An intelligent agent platform designed to execute tasks, use tools, maintain conversational memory, and improve its decision-making through feedback and evaluation.**
+<p align="center">
+  <strong>An AI agent platform built to understand tasks, use tools, learn from feedback, and evaluate its performance.</strong>
+</p>
 
-AEGIS is a research-oriented AI agent project that explores how an AI system can move beyond simple question-and-answer interactions toward structured task execution, tool selection, persistent memory, and feedback-driven adaptation.
+<p align="center">
+  <a href="https://github.com/ASAD1960/AEGIS">GitHub Repository</a> •
+  <a href="https://aegis-cyan-phi.vercel.app/">Live Application</a> •
+  <a href="https://github.com/ASAD1960">Developer Profile</a>
+</p>
 
-The project combines a Python-based agent engine, a FastAPI backend, a web interface, language model integrations, a persistent memory system, and a benchmarking framework.
+## Introduction
 
-Rather than focusing only on generating responses, AEGIS is designed around a broader question:
+**AEGIS is an AI agent platform designed to understand user requests, perform tasks using available tools, remember conversations, and improve its approach through user feedback.**
 
-**Can feedback-driven adaptation improve an AI agent's task success while reducing repeated errors?**
+Instead of simply generating text, AEGIS can select and use tools to perform tasks such as calculations, text processing, and data analysis. It also stores conversation history so users can return to previous conversations.
 
-The project provides a foundation for investigating this question through modular agent components, persistent records, evaluation datasets, and repeatable experiments.
+The project explores an important question:
 
----
+**Can user feedback help an AI agent perform tasks more successfully and avoid repeating mistakes?**
+
+AEGIS is being developed as a modular research project, with a focus on practical AI capabilities, feedback-based improvement, and measurable performance evaluation.
+
+## Project Links
+
+| Resource | Link |
+|---|---|
+| GitHub Repository | [ASAD1960/AEGIS](https://github.com/ASAD1960/AEGIS) |
+| Live Application | [Open AEGIS](https://aegis-cyan-phi.vercel.app/) |
+| Developer Profile | [Asad Yar](https://github.com/ASAD1960) |
 
 ## Technology Stack
 
-AEGIS uses the following technologies and tools.
-
-### Backend and Agent Engine
-
-| Technology | Purpose |
+| Component | Technologies |
 |---|---|
-| Python | Core agent implementation and application logic |
-| FastAPI | Backend API and communication layer |
-| Pydantic | Request validation and data models |
-| SQLite | Persistent storage for conversations, memory, and application records |
-| Uvicorn | ASGI server for running the API |
+| Backend | Python, FastAPI, Pydantic, Uvicorn |
+| Frontend | Next.js 16, React 19, TypeScript |
+| Styling | Tailwind CSS 4 |
+| AI Integration | Cloudflare Workers AI, Ollama |
+| Database | SQLite, configurable PostgreSQL |
+| Data Processing | Python, CSV workflows |
+| Testing | Pytest, TypeScript Compiler |
+| Development Tools | Git, GitHub, Visual Studio Code |
 
-### Frontend
+## Key Features
 
-| Technology | Purpose |
-|---|---|
-| Next.js 16 | Web application framework |
-| React 19 | User interface components |
-| TypeScript | Type-safe frontend development |
-| Tailwind CSS 4 | Interface styling |
-| Lucide | Interface icons |
+### 1. AI Agent and Task Processing
+- Processes user requests and identifies the intended task.
+- Selects suitable tools based on the task.
+- Coordinates tool execution.
+- Returns results through the conversational interface.
 
-### Language Model Integrations
+### 2. Tool Integration
 
-| Technology | Purpose |
-|---|---|
-| Cloudflare Workers AI | Cloud-based language model integration |
-| Ollama | Local language model integration |
+AEGIS currently includes modular tools for:
 
-### Data Processing and Evaluation
+- **Calculator:** Performs mathematical calculations.
+- **Text Processing:** Handles basic text-related operations.
+- **Data Analysis:** Supports data analysis workflows.
+- **CSV Processing:** Works with uploaded CSV data.
 
-- Custom benchmark datasets and scenario generation
-- Dataset validation and splitting
-- Agent response evaluation
-- Benchmark execution and analytics
-- Experiment result storage
-- Feedback analysis and strategy selection
+The modular design allows additional tools to be integrated as the project develops.
 
-### Development and Testing
+### 3. Language Model Integration
 
-- Git and GitHub for version control
-- Visual Studio Code for development
-- Pytest for automated testing
-- TypeScript compiler for frontend type checking
-- Next.js production build for frontend verification
+AEGIS supports multiple language model providers:
 
----
+- **Cloudflare Workers AI:** Provides access to cloud-hosted AI models.
+- **Ollama:** Supports local language model integration.
 
-## Features
+This approach provides flexibility in choosing between cloud-based and locally running models.
 
-### 1. Intelligent Task Processing
+### 4. Conversation Management
+- Creates new conversations.
+- Stores conversation messages.
+- Retrieves previous conversations.
+- Displays conversation history.
+- Supports opening and deleting conversations.
 
-AEGIS accepts user requests and processes them through its agent engine.
+Conversation persistence allows users to return to previous interactions.
 
-Implemented capabilities include:
+### 5. Feedback and Learning Components
 
-- User task interpretation
-- Task routing and tool selection
-- General conversational responses
-- Structured task execution
-- Separation of agent logic and tool execution
+AEGIS includes a feedback-based learning architecture designed to analyze user evaluations and support improvements in future task execution.
 
-### 2. Tool Execution System
+Current components include:
+- Feedback collection and storage.
+- Feedback analysis.
+- Performance-based selection components.
+- Learning strategy components.
+- Integration with the agent workflow.
 
-AEGIS uses a modular tool architecture that allows the agent to select and execute supported tools.
+The effectiveness of these components still requires systematic experimentation and evaluation.
 
-Currently implemented tools include:
+### 6. Benchmarking and Evaluation
 
-- **Calculator Tool:** Performs mathematical calculations.
-- **Text Tool:** Handles supported text-processing and analysis tasks.
-- **Data Analysis Tool:** Processes supported structured data and analysis requests.
+AEGIS includes a modular benchmarking framework to support structured performance testing.
 
-The tool registry provides a centralized way to organize available tools.
+Its components include:
+- Benchmark dataset generation.
+- Scenario families.
+- Dataset validation.
+- Dataset splitting.
+- Dataset processing pipelines.
+- Benchmark execution.
+- Performance evaluation.
+- Analytics and experiment storage.
 
-### 3. Persistent Conversational Memory
+This framework provides a foundation for comparing agent performance across different test scenarios.
 
-AEGIS includes a SQLite-based conversation memory system.
+### 7. Web Interface
 
-Implemented capabilities include:
+The frontend provides a conversational interface for interacting with AEGIS.
 
-- Creating conversations
-- Saving user messages
-- Saving assistant responses
-- Retrieving conversation history
-- Listing previous conversations
-- Restoring conversations through the frontend
-- Deleting conversations
-- Maintaining conversation identifiers
-- Supplying previous messages to the Cloudflare language model integration
+Current interface features include:
+- Chat-based interaction.
+- Conversation history.
+- Create, open, and delete conversations.
+- Backend and system status information.
+- Tool information.
+- Light, Dark, and System appearance preferences.
 
-This allows users to continue previous conversations rather than treating every interaction as an entirely separate session.
+## System Architecture
 
-### 4. Language Model Integration
+AEGIS follows a modular architecture that separates the user interface, API, agent engine, tools, learning components, and persistent storage.
 
-AEGIS supports two language model integration paths:
+```text
+                 USER
+                   |
+                   v
+          NEXT.JS WEB INTERFACE
+                   |
+                   v
+              FASTAPI
+                   |
+                   v
+              AI AGENT
+                   |
+          +--------+--------+
+          |        |        |
+          v        v        v
+       TASK     TOOL      LLM
+     PROCESSING SELECTION INTEGRATION
+                   |
+                   v
+             TOOL EXECUTION
+                   |
+          +--------+--------+
+          |        |        |
+          v        v        v
+       CALCULATOR TEXT    DATA
+                 TOOLS   ANALYSIS
+                   |
+                   v
+              TASK RESULT
+                   |
+                   v
+             USER FEEDBACK
+                   |
+                   v
+          LEARNING COMPONENTS
+                   |
+                   v
+          PERFORMANCE ANALYSIS
 
-**Cloudflare Workers AI**
-- Cloud-based model communication
-- Configurable model selection
-- API authentication
-- Conversation-history support
-- Response processing and error handling
+        DATABASE AND PERSISTENCE
+        Support conversation,
+        feedback, and experiment records.
+```
 
-**Ollama**
-- Local language model integration
-- Support for running compatible models locally
+## Project Structure
 
-The architecture separates language model communication from the main agent engine.
-
-### 5. Feedback and Learning System
-
-AEGIS includes a learning subsystem designed to record and analyze feedback.
-
-Implemented components include:
-
-- Feedback collection
-- Feedback analysis
-- Performance-based selection
-- Strategy-related components
-- Integration between agent execution and feedback records
-
-The learning architecture provides a foundation for studying how previous outcomes can inform future agent decisions.
-
-### 6. Benchmarking and Research Framework
-
-AEGIS includes a dedicated benchmarking subsystem for evaluating agent behavior.
-
-Implemented components include:
-
-- Benchmark dataset generation
-- Scenario families
-- Dataset validation
-- Dataset splitting
-- Dataset pipelines
-- Benchmark execution
-- Evaluation
-- Analytics
-- Experiment result storage
-
-This subsystem is intended to support repeatable evaluation rather than relying only on subjective impressions of response quality.
-
-### 7. Web Application
-
-AEGIS includes a Next.js-based frontend connected to the FastAPI backend.
-
-Implemented interface capabilities include:
-
-- Chat interface
-- Backend connection status
-- Conversation history
-- Opening previous conversations
-- Deleting conversations
-- Starting new conversations
-- Tool and system information sections
-- Assistant response display
-
-### 8. Backend API
-
-The FastAPI application exposes endpoints for communication with the agent and its supporting features.
-
-Current endpoints include:
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | `/api/health` | Check backend health |
-| POST | `/api/tasks` | Submit a task to the agent |
-| GET | `/api/conversations` | Retrieve conversation history |
-| GET | `/api/conversations/{conversation_id}/messages` | Retrieve messages from a conversation |
-| DELETE | `/api/conversations/{conversation_id}` | Delete a conversation |
-
-The API also includes a CSV upload endpoint for supported data-analysis workflows.
-
----
-
-## How AEGIS Works
-
-The application follows a modular architecture.
-
-A typical user interaction follows this process:
-
-1. The user submits a request through the web interface.
-2. The frontend sends the request to the FastAPI backend.
-3. The backend identifies or creates the conversation.
-4. Previous conversation messages are retrieved when available.
-5. The agent processes the request and determines the appropriate execution path.
-6. A supported tool or language model integration handles the request.
-7. The agent produces a response.
-8. The backend saves the user message and assistant response.
-9. The frontend displays the result and refreshes the conversation history.
-
-This separation makes it possible to develop and evaluate individual components without placing the entire application inside one large module.
-
----
-
-## Project Architecture
-
-AEGIS is organized into separate modules for agent execution, API communication, benchmarking, learning, language model integrations, memory, and tools.
-
-### Project Structure
+The project is organized into separate modules to make development, testing, and future expansion easier.
 
 ```text
 AEGIS/
-|
-|-- app/
-|   |
-|   |-- agent/
-|   |   |-- agent.py
-|   |   |-- executor.py
-|   |   |-- identity.py
-|   |   |-- task_parser.py
-|   |   |-- tool_selector.py
-|   |
-|   |-- api/
-|   |   |-- main.py
-|   |
-|   |-- benchmark/
-|   |   |-- analytics.py
-|   |   |-- dataset.py
-|   |   |-- dataset_generator.py
-|   |   |-- dataset_pipeline.py
-|   |   |-- dataset_splitter.py
-|   |   |-- dataset_validator.py
-|   |   |-- evaluator.py
-|   |   |-- runner.py
-|   |   |-- scenario_families.py
-|   |   |-- storage.py
-|   |
-|   |-- core/
-|   |   |-- config.py
-|   |
-|   |-- learning/
-|   |   |-- analyzer.py
-|   |   |-- feedback.py
-|   |   |-- selector.py
-|   |   |-- strategy.py
-|   |
-|   |-- llm/
-|   |   |-- cloudflare_client.py
-|   |   |-- ollama_client.py
-|   |
-|   |-- memory/
-|   |   |-- database.py
-|   |
-|   |-- tools/
-|   |   |-- base.py
-|   |   |-- calculator_tool.py
-|   |   |-- data_analysis_tool.py
-|   |   |-- registry.py
-|   |   |-- text_tool.py
-|   |
-|   |-- main.py
-|
-|-- frontend/
-|   |-- src/
-|   |   |-- app/
-|   |       |-- globals.css
-|   |       |-- layout.tsx
-|   |       |-- page.tsx
-|   |
-|   |-- package.json
-|
-|-- tests/
-|   |-- conftest.py
-|   |-- test_agent_data_analysis.py
-|   |-- test_agent_integration.py
-|   |-- test_agent_request_routing.py
-|   |-- test_agent_text_analysis.py
-|   |-- test_analyzer.py
-|   |-- test_api.py
-|   |-- test_benchmark_analytics.py
-|   |-- test_benchmark_runner.py
-|   |-- test_calculator_tool.py
-|   |-- test_character_symbol_scenarios.py
-|   |-- test_conversation_memory.py
-|   |-- test_dataset_generator.py
-|   |-- test_dataset_pipeline.py
-|   |-- test_dataset_splitter.py
-|   |-- test_dataset_validator.py
-|   |-- test_data_analysis_tool.py
-|   |-- test_evaluator.py
-|   |-- test_executor.py
-|   |-- test_feedback.py
-|   |-- test_feedback_integration.py
-|   |-- test_memory.py
-|   |-- test_research_runner_persistence.py
-|   |-- test_research_storage.py
-|   |-- test_selector.py
-|   |-- test_sentence_boundary_scenarios.py
-|   |-- test_strategy.py
-|   |-- test_task_parser.py
-|   |-- test_text_tool.py
-|   |-- test_tool_registry.py
-|   |-- test_tool_selector.py
-|
-|-- requirements.txt
-|-- test_agent.py
-|-- verify_database.py
-|-- .gitignore
-|-- README.md
+│
+├── app/
+│   ├── agent/
+│   │   ├── agent.py
+│   │   ├── executor.py
+│   │   ├── identity.py
+│   │   ├── task_parser.py
+│   │   └── tool_selector.py
+│   │
+│   ├── api/
+│   │   └── main.py
+│   │
+│   ├── benchmark/
+│   │   ├── analytics.py
+│   │   ├── dataset.py
+│   │   ├── dataset_generator.py
+│   │   ├── dataset_pipeline.py
+│   │   ├── dataset_splitter.py
+│   │   ├── dataset_validator.py
+│   │   ├── evaluator.py
+│   │   ├── runner.py
+│   │   ├── scenario_families.py
+│   │   └── storage.py
+│   │
+│   ├── core/
+│   │   └── config.py
+│   │
+│   ├── learning/
+│   │   ├── analyzer.py
+│   │   ├── feedback.py
+│   │   ├── selector.py
+│   │   └── strategy.py
+│   │
+│   ├── llm/
+│   │   ├── cloudflare_client.py
+│   │   └── ollama_client.py
+│   │
+│   ├── memory/
+│   │   └── database.py
+│   │
+│   ├── tools/
+│   │   ├── base.py
+│   │   ├── calculator_tool.py
+│   │   ├── data_analysis_tool.py
+│   │   ├── registry.py
+│   │   └── text_tool.py
+│   │
+│   └── main.py
+│
+├── frontend/
+│   └── src/
+│       └── app/
+│           ├── globals.css
+│           ├── layout.tsx
+│           └── page.tsx
+│
+├── tests/
+│
+├── data/
+│
+├── requirements.txt
+├── README.md
+└── .gitignore
 ```
 
----
+## Database and Persistence
 
-## Benchmarking and Evaluation
+AEGIS uses a database layer to store application information.
 
-A central part of AEGIS is its research and evaluation framework.
+Current database functionality includes:
+- Conversation records.
+- Conversation messages.
+- Feedback records.
+- Benchmark and experiment records.
 
-The benchmark subsystem is designed to support structured experiments involving agent tasks, execution outcomes, and performance analysis.
-
-Its components cover:
-
-- Dataset generation
-- Scenario organization
-- Dataset validation
-- Dataset splitting
-- Benchmark execution
-- Result evaluation
-- Performance analytics
-- Experiment persistence
-
-The project also includes tests for benchmark execution, analytics, dataset processing, evaluation, and research-result storage.
-
-### Research Objective
-
-The primary research direction is to investigate whether feedback-driven adaptation can improve task success and reduce repeated errors.
-
-Future experiments will compare different agent configurations under controlled conditions, using consistent datasets and evaluation procedures.
-
----
+SQLite is supported for local development, while PostgreSQL can be configured through the `AEGIS_DATABASE_URL` environment variable.
 
 ## Installation and Setup
 
-### Requirements
+### Prerequisites
 
-- Python development environment
+Install the following before running AEGIS:
+
+- Python
 - Node.js and npm
 - Git
-- Visual Studio Code (recommended)
-- Cloudflare Workers AI credentials for cloud model usage
-- Ollama and a compatible model for local model usage
+- A code editor such as Visual Studio Code
 
 ### 1. Clone the Repository
 
-```bash
+```powershell
 git clone https://github.com/ASAD1960/AEGIS.git
 cd AEGIS
 ```
 
 ### 2. Create a Python Virtual Environment
 
-Windows PowerShell:
-
 ```powershell
 python -m venv .venv
 ```
 
-Activate it:
+Activate it in PowerShell:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
@@ -385,33 +289,39 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 pip install -r requirements.txt
 ```
 
-### 4. Configure Environment Variables
+### 4. Configure AI Provider Credentials
 
-For Cloudflare Workers AI, configure the following variables in your backend terminal:
+For Cloudflare Workers AI, configure the required environment variables:
 
 ```powershell
-$env:CLOUDFLARE_ACCOUNT_ID="YOUR_ACCOUNT_ID"
-$env:CLOUDFLARE_API_TOKEN="YOUR_API_TOKEN"
+$env:CLOUDFLARE_ACCOUNT_ID="your_account_id"
+$env:CLOUDFLARE_API_TOKEN="your_api_token"
 ```
 
-Replace the placeholders with your own credentials.
+Ollama can also be configured for local model integration.
 
-**Security:** Never commit API tokens, passwords, or private environment files to GitHub.
+Keep API credentials private. Never commit real tokens, passwords, or secret keys to GitHub.
 
-### 5. Install Frontend Dependencies
+### 5. Configure the Database (Optional)
 
-Open another terminal:
+SQLite can be used for local development.
+
+For PostgreSQL, configure:
+
+```powershell
+$env:AEGIS_DATABASE_URL="your_database_connection_string"
+```
+
+### 6. Install Frontend Dependencies
+
+Open another PowerShell terminal:
 
 ```powershell
 cd frontend
-npm install
+npm.cmd install
 ```
 
----
-
-## Running AEGIS
-
-The backend and frontend run in separate terminals.
+## Running AEGIS Locally
 
 ### Start the Backend
 
@@ -421,79 +331,60 @@ From the project root:
 python -m uvicorn app.api.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Backend address:
+Backend:
 
-```text
-http://127.0.0.1:8000
-```
+`http://127.0.0.1:8000`
 
-Health endpoint:
+API documentation:
 
-```text
-http://127.0.0.1:8000/api/health
-```
+`http://127.0.0.1:8000/docs`
 
 ### Start the Frontend
 
-In a separate terminal:
+Open another terminal:
 
 ```powershell
 cd frontend
-npm run dev
+npm.cmd run dev
 ```
 
-Frontend address:
+Frontend:
 
-```text
-http://localhost:3000
-```
+`http://localhost:3000`
 
-Open the frontend address in your browser to use AEGIS.
+## API Endpoints
 
----
+The backend exposes API routes for application health, agent interaction, tools, data uploads, and conversation management.
 
-## Testing and Verification
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/api/health` | Health check |
+| GET | `/api/status` | Application status |
+| GET | `/api/tools` | Available tools |
+| POST | `/api/tasks` | Submit a task |
+| POST | `/api/data/upload` | Upload data |
+| GET | `/api/conversations` | Retrieve conversations |
+| GET | `/api/conversations/{conversation_id}/messages` | Retrieve conversation messages |
+| DELETE | `/api/conversations/{conversation_id}` | Delete a conversation |
 
-AEGIS includes an automated test suite covering the main application components.
+For the latest API behavior and request formats, refer to the backend documentation at `/docs` when running the application.
 
-The tests are organized around:
+## Testing and Quality Assurance
 
-| Area | Testing coverage |
-|---|---|
-| Agent | Integration, routing, and request processing |
-| Tools | Calculator, text processing, data analysis, and registry |
-| Memory | Database operations and conversation persistence |
-| API | Backend endpoints and request handling |
-| Learning | Feedback, analysis, selection, and strategy |
-| Benchmarking | Dataset generation, validation, execution, and analytics |
-| Research | Evaluation and experiment-result persistence |
+Testing is an important part of AEGIS development.
 
-### Run the Complete Backend Test Suite
+### Run Backend Tests
 
-From the project root:
+Run the complete test suite:
 
 ```powershell
 python -m pytest
 ```
 
-### Run Tests with Detailed Output
+For detailed output:
 
 ```powershell
 python -m pytest -v
-```
-
-### Run a Specific Test File
-
-For example:
-
-```powershell
-python -m pytest tests/test_conversation_memory.py -v
-```
-
-### Verify the Database
-
-```powershell
-python verify_database.py
 ```
 
 ### Check Frontend TypeScript
@@ -507,127 +398,67 @@ npx tsc --noEmit
 ### Build the Frontend
 
 ```powershell
-npm run build
+npm.cmd run build
 ```
 
-The automated suite covers the implemented backend functionality. Test results should be generated from the current repository state when reporting a release or research experiment.
-
----
-
-## Current Limitations
-
-AEGIS is an actively developed research-oriented project. Its current implementation provides an agent engine, memory, tool integrations, learning components, and benchmarking infrastructure, but it is not yet a fully autonomous general-purpose intelligence system.
-
-Current limitations and areas requiring further development include:
-
-- Learning and feedback components need more extensive controlled evaluation.
-- Persistent memory is currently based on SQLite.
-- Cloudflare and Ollama integrations have different execution capabilities.
-- The agent's planning and reasoning capabilities require further development.
-- Tool execution requires stronger permission and safety controls.
-- Benchmark results need broader experiments and reproducibility analysis.
-- Production deployment requires appropriate hosting, security, and database configuration.
-
-These limitations are important considerations when interpreting the current capabilities of the system.
-
----
-
-## Future Development Roadmap
-
-The following items represent planned improvements, not claims about features already completed.
-
-### 1. Advanced Agent Planning
-
-- Multi-step task planning
-- Task decomposition
-- Dependency-aware execution
-- Dynamic plan adjustment
-- Execution-state tracking
-
-### 2. Improved Memory Architecture
-
-- Structured long-term memory
-- Memory retrieval and relevance ranking
-- User preference memory
-- Context summarization
-- Memory management and retention policies
-
-### 3. Feedback-Driven Adaptation
-
-- More advanced feedback analysis
-- Learning from previous execution outcomes
-- Strategy adaptation
-- Error-pattern identification
-- Reduction of repeated execution failures
-
-### 4. Expanded Tool Ecosystem
-
-- More external tool integrations
-- File-processing tools
-- Research and information-retrieval tools
-- Tool chaining
-- Tool execution monitoring
-
-### 5. Safety and Controlled Autonomy
-
-- Permission-based tool execution
-- Human approval for sensitive actions
-- Execution limits
-- Input and output validation
-- Audit trails
-- Failure recovery
-
-### 6. Advanced Benchmarking
-
-- Larger benchmark datasets
-- More diverse task scenarios
-- Baseline agent comparisons
-- Ablation studies
-- Success-rate analysis
-- Repeated-error measurement
-- Reproducible experiment reports
-
-### 7. Frontend and Deployment
-
-- Improved monitoring and analytics
-- Better visualization of agent execution
-- Deployment-ready configuration
-- Production database integration
-- Authentication and access control
-- More comprehensive operational logging
-
----
+These checks help identify backend test failures, TypeScript errors, and frontend build issues.
 
 ## Research Direction
 
-AEGIS is intended to develop beyond a conventional chatbot by investigating the relationship between memory, feedback, tool use, and agent performance.
+AEGIS is being developed around the following research question:
 
-The primary research question is:
+**Can feedback-driven adaptation improve an AI agent's task success while reducing repeated errors?**
 
-**Can feedback-driven adaptation improve task success while reducing repeated errors in an AI agent?**
+The project aims to investigate how an agent can use feedback and performance history to make better decisions when handling future tasks.
 
-Potential research experiments include:
+The research direction includes:
 
-1. Comparing an agent with feedback adaptation against a baseline without adaptation.
-2. Measuring task success across repeated benchmark runs.
-3. Investigating whether stored feedback reduces recurring execution errors.
-4. Evaluating the effect of conversation memory on multi-turn task completion.
-5. Studying how different tool-selection strategies affect execution outcomes.
+1. Establishing baseline agent performance.
+2. Collecting feedback from task execution.
+3. Analyzing feedback and identifying recurring problems.
+4. Exploring feedback-based strategy selection.
+5. Evaluating performance across benchmark scenarios.
+6. Comparing results to understand whether feedback-based adaptation produces measurable improvements.
 
-The benchmarking framework provides the foundation for developing these experiments and documenting their results.
+The benchmarking framework provides a foundation for conducting these experiments in a structured and reproducible way.
 
----
+## Current Limitations
+
+AEGIS is an actively developing research project. Some capabilities require further implementation and validation.
+
+Current limitations include:
+
+- Feedback-based improvement has not yet been established as a proven performance gain.
+- Advanced long-term semantic memory remains an area for future development.
+- Complex multi-step autonomous planning requires further work.
+- Tool permission management and stronger execution safeguards need additional development.
+- Broader benchmark experiments are needed to establish reliable performance comparisons.
+- Production deployment, security, and scalability require further hardening.
+
+These limitations are part of the project's ongoing development and research process.
+
+## Development Roadmap
+
+| Area | Planned Improvements |
+|---|---|
+| Agent Intelligence | More capable task planning and execution |
+| Memory | Improved long-term and contextual memory |
+| Learning | More effective feedback-driven adaptation |
+| Tool System | Additional tools and integrations |
+| Evaluation | Larger benchmark datasets and controlled experiments |
+| Safety | Better tool permissions and execution controls |
+| Performance | Improved reliability and efficiency |
+| Research | Reproducible experiments and documented results |
 
 ## Author
 
 **Asad Yar**
 
-AEGIS — Self-Learning AI Agent
+Computer Science Graduate
+Developer and Researcher
 
-GitHub: [ASAD1960](https://github.com/ASAD1960)
+GitHub: [@ASAD1960](https://github.com/ASAD1960)
 
-Project Repository: [github.com/ASAD1960/AEGIS](https://github.com/ASAD1960/AEGIS)
+**AEGIS — Self-Learning AI Agent**
 
----
-
-© 2026 Asad Yar. All rights reserved.
+A research-driven project exploring practical AI agents, tool use, feedback-based adaptation, and performance evaluation.
