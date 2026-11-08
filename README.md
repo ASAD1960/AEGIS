@@ -1,14 +1,8 @@
-# AEGIS — Self-Learning AI Agent
+# AEGIS: A Self-Learning AI Agent
 
-<p align="center">
-  <strong>An AI agent platform designed to process tasks, use tools, learn from feedback, and maintain persistent user-specific memory.</strong>
-</p>
+**An AI agent platform designed to process tasks, use tools, learn from feedback, and maintain persistent user-specific memory.**
 
-<p align="center">
-  <a href="https://github.com/ASAD1960/AEGIS">GitHub Repository</a> •
-  <a href="https://aegis-cyan-phi.vercel.app/">Live Application</a> •
-  <a href="https://github.com/ASAD1960">Developer Profile</a>
-</p>
+[GitHub Repository](https://github.com/ASAD1960/AEGIS) · [Live Application](https://aegis-cyan-phi.vercel.app/) · [Developer Profile](https://github.com/ASAD1960)
 
 ---
 
@@ -196,6 +190,78 @@ Current interface capabilities include:
 
 ---
 
+## Screenshots
+
+This section showcases the AEGIS user interface, application design, and example interactions. Each screenshot highlights a different part of the platform.
+
+### 1. Login Screen
+
+![AEGIS Login Screen](docs/screenshots/01-login.png)
+
+The login screen provides an authentication entry point for users. It allows users to access their accounts and enter the AEGIS application through its authentication system.
+
+### 2. Home Screen
+
+![AEGIS Home Screen](docs/screenshots/02-home-screen.png)
+
+The home screen introduces the AEGIS platform and provides the starting point for interacting with the AI agent. It serves as the main entry point to the application.
+
+### 3. Dashboard
+
+![AEGIS Dashboard](docs/screenshots/03-dashboard.png)
+
+The dashboard brings together important application information and provides users with an overview of the AEGIS environment and its available features.
+
+### 4. Dark Mode
+
+![AEGIS Dark Mode](docs/screenshots/04-dark-mode.png)
+
+AEGIS includes a dark appearance option to provide an alternative visual experience. This allows users to choose an interface appearance according to their viewing preferences.
+
+### 5. Prompting First Interaction
+
+![AEGIS First Prompt](docs/screenshots/05-prompting.png)
+
+This screenshot demonstrates how users communicate with AEGIS through natural-language prompts. Users can describe their questions or tasks without needing to use a fixed command format.
+
+### 6. Result First Response
+
+![AEGIS First Result](docs/screenshots/06-result.png)
+
+This screenshot presents the result of the first interaction. It demonstrates how AEGIS interprets a user request and generates a relevant response.
+
+### 7. Prompting Second Interaction
+
+![AEGIS Second Prompt](docs/screenshots/07-prompting-2.png)
+
+The second prompting example demonstrates another interaction with the agent. It highlights the ability to submit different questions and instructions through the same conversational interface.
+
+### 8. Result Second Response
+
+![AEGIS Second Result](docs/screenshots/08-result-2.png)
+
+This screenshot shows the response generated from the second interaction. It provides an additional example of AEGIS's natural-language response generation.
+
+### 9. Can AI Replace Human Intelligence?
+
+![Can AI Replace Human Intelligence](docs/screenshots/09-ai-vs-human-intelligence.png)
+
+This example explores the relationship between artificial intelligence and human intelligence. It considers AI's strengths in data processing and automation alongside human creativity, emotional understanding, and judgment.
+
+### 10. Will Future Generations Become Too Dependent on Technology?
+
+![Future Generations and Technology](docs/screenshots/10-future-generations.png)
+
+This interaction explores the possible effects of technological dependence on future generations. It demonstrates AEGIS's ability to discuss broader social questions and present a reasoned response.
+
+### 11. Copyright and Project Attribution
+
+![AEGIS Copyright](docs/screenshots/11-copyright.png)
+
+This final screenshot presents the copyright and project attribution for AEGIS, recognizing **Asad Yar** as the developer of the project.
+
+---
+
 ## System Architecture
 
 AEGIS follows a modular architecture that separates the frontend, API, agent engine, language model integration, tools, learning components, and persistence.
@@ -207,19 +273,19 @@ AEGIS follows a modular architecture that separates the frontend, API, agent eng
               NEXT.JS FRONTEND
                       |
                       v
-                 FASTAPI
+                   FASTAPI
                       |
                       v
                 AUTHENTICATION
                       |
                       v
-                  AI AGENT
+                   AI AGENT
                       |
           +-----------+-----------+
           |           |           |
           v           v           v
-      TASK          TOOL          LLM
-    PROCESSING    SELECTION   INTEGRATION
+        TASK        TOOL          LLM
+     PROCESSING   SELECTION   INTEGRATION
                       |
                       v
                 TOOL EXECUTION
@@ -227,14 +293,14 @@ AEGIS follows a modular architecture that separates the frontend, API, agent eng
           +-----------+-----------+
           |           |           |
           v           v           v
-      CALCULATOR    TEXT       DATA ANALYSIS
-                    TOOLS
+      CALCULATOR    TEXT      DATA ANALYSIS
+                   TOOLS
                       |
                       v
-                 TASK RESULT
+                  TASK RESULT
                       |
                       v
-                USER FEEDBACK
+                 USER FEEDBACK
                       |
                       v
               LEARNING COMPONENTS
@@ -242,14 +308,16 @@ AEGIS follows a modular architecture that separates the frontend, API, agent eng
                       v
               PERFORMANCE ANALYSIS
 
-        DATABASE AND PERSISTENCE
+             DATABASE AND PERSISTENCE
+                      |
+          +-----------+-----------+
+          |           |           |
+          v           v           v
+     Conversations  Personal   Feedback
+                     Memories   Records
           |
-          +-- Conversations
-          +-- Conversation Messages
-          +-- Personal Memories
-          +-- Memory History
-          +-- Feedback Records
-          +-- Benchmark Experiments
+          v
+    Benchmark Experiments
 ```
 
 ## Persistent Memory Architecture
@@ -348,8 +416,9 @@ AEGIS/
 │           └── supabase.ts
 │
 ├── tests/
-│
 ├── data/
+├── docs/
+│   └── screenshots/
 │
 ├── requirements.txt
 ├── README.md
@@ -688,10 +757,12 @@ GitHub: [@ASAD1960](https://github.com/ASAD1960)
 
 ---
 
-<p align="center">
-  <strong>AEGIS — Self-Learning AI Agent</strong>
-  <br />
-  A research-driven project exploring AI agents, tool use, feedback-based adaptation, persistent personal memory, and performance evaluation.
-  <br /><br />
-  © Asad Yar. All rights reserved.
-</p>
+## Copyright
+
+**AEGIS: A Self-Learning AI Agent**
+
+Developed by **Asad Yar**.
+
+© 2026 Asad Yar. All rights reserved.
+
+This project represents independent development and research into AI agents, tool integration, feedback-based adaptation, persistent personal memory, and performance evaluation.
