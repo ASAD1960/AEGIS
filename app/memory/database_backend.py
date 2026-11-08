@@ -1,4 +1,5 @@
-﻿import os
+﻿
+import os
 
 if os.getenv("AEGIS_DATABASE_URL", "").strip():
     from . import postgres_backend as _backend
@@ -28,6 +29,10 @@ _FUNCTIONS = (
     "get_conversation_messages",
     "get_all_conversations",
     "delete_conversation",
+    "save_user_memory",
+    "get_user_memories",
+    "get_user_memory_history",
+    "delete_user_memory",
 )
 
 for _name in _FUNCTIONS:

@@ -5,22 +5,41 @@ AEGIS API
 FastAPI application connecting the AEGIS web interface
 to the agent engine and persistent conversation memory.
 
-Supports context-aware conversations through SQLite
-and Cloudflare Workers AI.
+Supports:
+- Supabase authentication
+- User-owned conversations
+- Context-aware agent execution
+- SQLite and PostgreSQL persistence
+- Persistent personal memory extraction and retrieval
+- Personal memory management API
+- CSV data analysis
 """
 
+import json
 import os
+import urllib.error
+import urllib.request
+
 from pathlib import Path
 from threading import Lock
 from uuid import uuid4
 
+from typing import Literal
+
 from fastapi import (
+    Depends,
     FastAPI,
     File,
     HTTPException,
+    Query,
+    Response,
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import (
+    HTTPAuthorizationCredentials,
+    HTTPBearer,
+)
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.agent.agent import Agent
@@ -31,7 +50,110 @@ from app.memory.database_backend import (
     get_conversation_messages,
     get_all_conversations,
     delete_conversation,
+    save_user_memory,
+    get_user_memories,
+    get_user_memory_history,
+    delete_user_memory,
 )
+from app.memory.extraction import extract_personal_memory_candidates
+
+
+# --------------------------------------------------
+# Supabase authentication configuration
+# --------------------------------------------------
+
+SUPABASE_URL = os.getenv(
+    "SUPABASE_URL",
+    os.getenv("NEXT_PUBLIC_SUPABASE_URL", ""),
+).strip().rstrip("/")
+
+SUPABASE_PUBLISHABLE_KEY = os.getenv(
+    "SUPABASE_PUBLISHABLE_KEY",
+    os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY", ""),
+).strip()
+
+AUTH_TIMEOUT_SECONDS = 10
+
+security = HTTPBearer(auto_error=False)
+
+
+def get_current_user_id(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> str:
+    """
+    Verify the Supabase access token through Supabase Auth.
+
+    The user ID is taken only from the verified Supabase response.
+    """
+
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not SUPABASE_URL or not SUPABASE_PUBLISHABLE_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="Supabase authentication is not configured on the backend.",
+        )
+
+    request = urllib.request.Request(
+        f"{SUPABASE_URL}/auth/v1/user",
+        headers={
+            "apikey": SUPABASE_PUBLISHABLE_KEY,
+            "Authorization": f"Bearer {credentials.credentials}",
+            "Accept": "application/json",
+        },
+        method="GET",
+    )
+
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=AUTH_TIMEOUT_SECONDS,
+        ) as response:
+            user_data = json.loads(response.read().decode("utf-8"))
+
+    except urllib.error.HTTPError as error:
+
+        if error.code in (401, 403):
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid or expired authentication token.",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from error
+
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to verify authentication with Supabase.",
+        ) from error
+
+    except (urllib.error.URLError, TimeoutError, OSError) as error:
+
+        raise HTTPException(
+            status_code=503,
+            detail="Supabase authentication service is unavailable.",
+        ) from error
+
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+
+        raise HTTPException(
+            status_code=502,
+            detail="Invalid response from the authentication service.",
+        ) from error
+
+    user_id = user_data.get("id") if isinstance(user_data, dict) else None
+
+    if not isinstance(user_id, str) or not user_id.strip():
+        raise HTTPException(
+            status_code=401,
+            detail="Unable to identify the authenticated user.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return user_id
 
 
 # --------------------------------------------------
@@ -110,6 +232,38 @@ class TaskRequest(BaseModel):
     )
 
 
+class MemoryCreateRequest(BaseModel):
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True
+    )
+
+    memory_key: str = Field(
+        min_length=1,
+        max_length=160,
+    )
+
+    content: str = Field(
+        min_length=1,
+        max_length=2000,
+    )
+
+    category: str = Field(
+        min_length=1,
+        max_length=80,
+    )
+
+    source_type: Literal[
+        "explicit_statement",
+        "correction",
+    ]
+
+    source_text: str = Field(
+        min_length=1,
+        max_length=5000,
+    )
+
+
 # --------------------------------------------------
 # Health endpoint
 # --------------------------------------------------
@@ -155,22 +309,28 @@ def get_registered_tools():
 # --------------------------------------------------
 
 @app.get("/api/conversations")
-def list_conversations():
-    """Return all saved conversations."""
+def list_conversations(
+    user_id: str = Depends(get_current_user_id),
+):
+    """Return conversations belonging to the authenticated user."""
 
     return {
-        "conversations": get_all_conversations(),
+        "conversations": get_all_conversations(user_id),
     }
 
 
 @app.get("/api/conversations/{conversation_id}/messages")
-def get_conversation_history(conversation_id: str):
-    """Retrieve messages belonging to one conversation."""
+def get_conversation_history(
+    conversation_id: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Retrieve messages belonging to the authenticated user."""
 
     try:
 
         messages = get_conversation_messages(
-            conversation_id
+            conversation_id,
+            user_id,
         )
 
         return {
@@ -182,17 +342,23 @@ def get_conversation_history(conversation_id: str):
 
         raise HTTPException(
             status_code=404,
-            detail=str(error),
+            detail="Conversation not found.",
         ) from error
 
 
 @app.delete("/api/conversations/{conversation_id}")
-def remove_conversation(conversation_id: str):
-    """Delete a conversation and all its messages."""
+def remove_conversation(
+    conversation_id: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Delete a conversation owned by the authenticated user."""
 
     try:
 
-        delete_conversation(conversation_id)
+        delete_conversation(
+            conversation_id,
+            user_id,
+        )
 
         return {
             "success": True,
@@ -204,8 +370,252 @@ def remove_conversation(conversation_id: str):
 
         raise HTTPException(
             status_code=404,
+            detail="Conversation not found.",
+        ) from error
+
+
+# --------------------------------------------------
+# Personal memory extraction and persistence
+# --------------------------------------------------
+
+def persist_explicit_personal_memories(
+    user_id: str,
+    message: str,
+) -> None:
+    """
+    Extract and persist supported personal facts.
+
+    Only explicit statements and corrections are saved.
+
+    Ambiguous candidates requiring confirmation are ignored.
+
+    Existing identical active memories are not duplicated.
+    """
+
+    candidates = extract_personal_memory_candidates(message)
+
+    for candidate in candidates:
+
+        # Never automatically save ambiguous candidates.
+        if candidate.get("action") != "save":
+            continue
+
+        source_type = candidate.get("source_type")
+
+        if source_type not in (
+            "explicit_statement",
+            "correction",
+        ):
+            continue
+
+        memory_key = candidate["memory_key"]
+        memory_content = candidate["content"]
+
+        # Check existing versions for this user and memory key.
+        history = get_user_memory_history(
+            user_id,
+            memory_key=memory_key,
+        )
+
+        already_saved = any(
+            memory.get("status") == "active"
+            and memory.get("content") == memory_content
+            for memory in history
+        )
+
+        if already_saved:
+            continue
+
+        # Save using the authenticated user ID.
+        # The database layer handles correction history.
+        save_user_memory(
+            user_id=user_id,
+            memory_key=memory_key,
+            content=memory_content,
+            category=candidate["category"],
+            source_type=source_type,
+            source_text=candidate["source_text"],
+        )
+
+
+# --------------------------------------------------
+# Persistent personal memory endpoints
+# --------------------------------------------------
+
+@app.get("/api/memories")
+def list_personal_memories(
+    category: str | None = Query(
+        default=None,
+        min_length=1,
+        max_length=80,
+    ),
+    limit: int = Query(
+        default=100,
+        ge=1,
+        le=500,
+    ),
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    Return active personal memories belonging to
+    the authenticated user.
+    """
+
+    try:
+
+        memories = get_user_memories(
+            user_id=user_id,
+            category=category,
+            limit=limit,
+        )
+
+    except ValueError as error:
+
+        raise HTTPException(
+            status_code=422,
             detail=str(error),
         ) from error
+
+    return {
+        "memories": memories,
+        "count": len(memories),
+    }
+
+
+@app.get("/api/memories/{memory_key}/history")
+def get_personal_memory_history(
+    memory_key: str,
+    limit: int = Query(
+        default=100,
+        ge=1,
+        le=500,
+    ),
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    Return the version history for one memory key.
+
+    Only records belonging to the authenticated user
+    are returned.
+    """
+
+    try:
+
+        history = get_user_memory_history(
+            user_id=user_id,
+            memory_key=memory_key,
+            limit=limit,
+        )
+
+    except ValueError as error:
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        ) from error
+
+    return {
+        "memory_key": memory_key,
+        "history": history,
+        "count": len(history),
+    }
+
+
+@app.post("/api/memories")
+def create_personal_memory(
+    request: MemoryCreateRequest,
+    response: Response,
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    Manually create or correct a personal memory.
+    """
+
+    try:
+
+        existing_history = get_user_memory_history(
+            user_id=user_id,
+            memory_key=request.memory_key,
+        )
+
+        # Avoid creating an identical active record.
+        for memory in existing_history:
+
+            if (
+                memory.get("status") == "active"
+                and memory.get("content") == request.content
+            ):
+
+                response.status_code = 200
+
+                return {
+                    "message": "This memory already exists.",
+                    "created": False,
+                    "memory": memory,
+                }
+
+        memory_id = save_user_memory(
+            user_id=user_id,
+            memory_key=request.memory_key,
+            content=request.content,
+            category=request.category,
+            source_type=request.source_type,
+            source_text=request.source_text,
+        )
+
+        response.status_code = 201
+
+        return {
+            "message": "Personal memory saved successfully.",
+            "created": True,
+            "memory": {
+                "id": memory_id,
+                "memory_key": request.memory_key,
+                "content": request.content,
+                "category": request.category,
+                "source_type": request.source_type,
+                "source_text": request.source_text,
+                "status": "active",
+            },
+        }
+
+    except ValueError as error:
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        ) from error
+
+
+@app.delete("/api/memories/{memory_id}")
+def remove_personal_memory(
+    memory_id: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    Permanently delete a memory belonging to the
+    authenticated user.
+    """
+
+    try:
+
+        delete_user_memory(
+            user_id=user_id,
+            memory_id=memory_id,
+        )
+
+    except ValueError as error:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Memory was not found.",
+        ) from error
+
+    return {
+        "message": "Personal memory deleted successfully.",
+        "deleted": True,
+        "memory_id": memory_id,
+    }
 
 
 # --------------------------------------------------
@@ -213,105 +623,92 @@ def remove_conversation(conversation_id: str):
 # --------------------------------------------------
 
 @app.post("/api/tasks")
-def execute_task(request: TaskRequest):
+def execute_task(
+    request: TaskRequest,
+    user_id: str = Depends(get_current_user_id),
+):
 
     conversation_id = request.conversation_id
 
+    # --------------------------------------------------
+    # Step 1: Create or validate the conversation.
+    # --------------------------------------------------
+
+    if conversation_id is None:
+
+        conversation_id = create_conversation(user_id)
+
+        previous_history = []
+
+    else:
+
+        try:
+
+            # Fetching history also verifies ownership.
+            previous_history = get_conversation_messages(
+                conversation_id,
+                user_id,
+                limit=20,
+            )
+
+        except ValueError as error:
+
+            raise HTTPException(
+                status_code=404,
+                detail="Conversation not found.",
+            ) from error
+
+    # --------------------------------------------------
+    # Step 2: Save the incoming user message.
+    # --------------------------------------------------
+
     try:
-
-        # --------------------------------------------------
-        # Step 1: Create or validate the conversation.
-        # --------------------------------------------------
-
-        if conversation_id is None:
-
-            conversation_id = create_conversation()
-
-        else:
-
-            # Verify that the conversation exists.
-            get_conversation_messages(conversation_id)
-
-        # --------------------------------------------------
-        # Step 2: Retrieve previous conversation history.
-        # --------------------------------------------------
-
-        # Retrieve history BEFORE saving the current message.
-        # This prevents the current message from being sent
-        # twice to the language model.
-
-        previous_history = get_conversation_messages(
-            conversation_id,
-            limit=20,
-        )
-
-        # --------------------------------------------------
-        # Step 3: Save the incoming user message.
-        # --------------------------------------------------
 
         save_conversation_message(
             conversation_id=conversation_id,
+            user_id=user_id,
             role="user",
             content=request.task,
         )
 
-        # --------------------------------------------------
-        # Step 4: Execute the AEGIS agent with context.
-        # --------------------------------------------------
+    except ValueError as error:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found.",
+        ) from error
+
+    # --------------------------------------------------
+    # Step 3: Extract and persist explicit personal memories.
+    # --------------------------------------------------
+
+    persist_explicit_personal_memories(
+        user_id=user_id,
+        message=request.task,
+    )
+
+    # --------------------------------------------------
+    # Step 4: Retrieve updated personal memories.
+    # --------------------------------------------------
+
+    personal_memories = get_user_memories(
+        user_id,
+        limit=30,
+    )
+
+    # --------------------------------------------------
+    # Step 5: Execute the AEGIS agent with separate context.
+    # --------------------------------------------------
+
+    try:
 
         with agent_lock:
 
             result = agent.process_request(
                 task=request.task,
                 conversation_history=previous_history,
+                personal_memories=personal_memories,
             )
-
-        # --------------------------------------------------
-        # Step 5: Extract the agent response.
-        # --------------------------------------------------
-
-        if not isinstance(result, dict):
-
-            raise RuntimeError(
-                "AEGIS returned an invalid execution result."
-            )
-
-        assistant_content = result.get("result")
-
-        if assistant_content is None:
-
-            assistant_content = str(result)
-
-        elif not isinstance(assistant_content, str):
-
-            assistant_content = str(assistant_content)
-
-        tool_name = result.get("tool_name")
-
-        if not isinstance(tool_name, str):
-            tool_name = None
-
-        # --------------------------------------------------
-        # Step 6: Persist the assistant response.
-        # --------------------------------------------------
-
-        save_conversation_message(
-            conversation_id=conversation_id,
-            role="assistant",
-            content=assistant_content,
-            tool_name=tool_name,
-        )
-
-        # --------------------------------------------------
-        # Step 7: Return the response and conversation ID.
-        # --------------------------------------------------
-
-        return {
-            "success": True,
-            "task": request.task,
-            "conversation_id": conversation_id,
-            "execution": result,
-        }
 
     except ValueError as error:
 
@@ -320,13 +717,75 @@ def execute_task(request: TaskRequest):
             detail=str(error),
         ) from error
 
+    # --------------------------------------------------
+    # Step 6: Extract the agent response.
+    # --------------------------------------------------
+
+    if not isinstance(result, dict):
+
+        raise HTTPException(
+            status_code=500,
+            detail="AEGIS returned an invalid execution result.",
+        )
+
+    assistant_content = result.get("result")
+
+    if assistant_content is None:
+
+        assistant_content = str(result)
+
+    elif not isinstance(assistant_content, str):
+
+        assistant_content = str(assistant_content)
+
+    tool_name = result.get("tool_name")
+
+    if not isinstance(tool_name, str):
+        tool_name = None
+
+    # --------------------------------------------------
+    # Step 7: Persist the assistant response.
+    # --------------------------------------------------
+
+    try:
+
+        save_conversation_message(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            role="assistant",
+            content=assistant_content,
+            tool_name=tool_name,
+        )
+
+    except ValueError as error:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found.",
+        ) from error
+
+    # --------------------------------------------------
+    # Step 8: Return the response and conversation ID.
+    # --------------------------------------------------
+
+    return {
+        "success": True,
+        "task": request.task,
+        "conversation_id": conversation_id,
+        "execution": result,
+    }
+
 
 # --------------------------------------------------
 # CSV upload and analysis endpoint
 # --------------------------------------------------
 
 @app.post("/api/data/upload")
-async def upload_csv(file: UploadFile = File(...)):
+async def upload_csv(
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Accept CSV analysis requests from authenticated users."""
 
     original_filename = file.filename or ""
 

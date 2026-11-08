@@ -3,8 +3,9 @@
 AEGIS Persistent Memory
 
 Manages user feedback, legacy benchmark results,
-reproducible research experiment storage, and
-persistent conversation history.
+reproducible research experiment storage,
+user-owned persistent conversation history,
+and user-owned persistent personal memories.
 """
 
 import json
@@ -23,6 +24,15 @@ def get_connection():
     connection.execute("PRAGMA foreign_keys = ON")
 
     return connection
+
+
+def _validate_user_id(user_id):
+    """Validate an authenticated user's ID."""
+
+    if not isinstance(user_id, str) or not user_id.strip():
+        raise ValueError("User ID must be a non-empty string.")
+
+    return user_id.strip()
 
 
 def initialize_database():
@@ -203,6 +213,66 @@ def initialize_database():
         """)
 
         # --------------------------------------------------
+        # User-owned persistent personal memory.
+        # --------------------------------------------------
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS user_memories (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                memory_key TEXT NOT NULL,
+                content TEXT NOT NULL,
+                category TEXT NOT NULL,
+                source_type TEXT NOT NULL
+                    CHECK(
+                        source_type IN (
+                            'explicit_statement',
+                            'correction'
+                        )
+                    ),
+                source_text TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'active'
+                    CHECK(
+                        status IN (
+                            'active',
+                            'superseded'
+                        )
+                    ),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                CHECK(length(trim(user_id)) > 0),
+                CHECK(length(trim(memory_key)) > 0),
+                CHECK(length(trim(content)) > 0),
+                CHECK(length(trim(category)) > 0),
+                CHECK(length(trim(source_text)) > 0)
+            )
+        """)
+
+        # Only one active version of a memory key
+        # can exist for each user.
+        connection.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS
+            idx_user_memories_unique_active_key
+            ON user_memories(user_id, memory_key)
+            WHERE status = 'active'
+        """)
+
+        # Efficient retrieval of a user's active memories.
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS
+            idx_user_memories_owner_status
+            ON user_memories(user_id, status)
+        """)
+
+        # Efficient lookup of memory history by key.
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS
+            idx_user_memories_owner_key
+            ON user_memories(user_id, memory_key)
+        """)
+
+        # --------------------------------------------------
         # Persistent conversation storage.
         # --------------------------------------------------
 
@@ -214,6 +284,36 @@ def initialize_database():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # --------------------------------------------------
+        # Conversation ownership migration.
+        #
+        # Existing conversations remain unassigned.
+        # They are not automatically assigned to any user.
+        # --------------------------------------------------
+
+        conversation_columns = {
+            row[1]
+            for row in connection.execute(
+                "PRAGMA table_info(conversations)"
+            ).fetchall()
+        }
+
+        if "user_id" not in conversation_columns:
+            connection.execute("""
+                ALTER TABLE conversations
+                ADD COLUMN user_id TEXT
+            """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS
+            idx_conversations_user_updated
+            ON conversations(user_id, updated_at DESC)
+        """)
+
+        # --------------------------------------------------
+        # Conversation messages.
+        # --------------------------------------------------
 
         connection.execute("""
             CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -826,11 +926,13 @@ def update_research_experiment_configuration(
 
 
 # ==========================================================
-# Persistent conversation functions.
+# User-owned persistent conversation functions.
 # ==========================================================
 
-def create_conversation(title="New conversation"):
-    """Create a conversation and return its unique ID."""
+def create_conversation(user_id, title="New conversation"):
+    """Create a conversation owned by the authenticated user."""
+
+    user_id = _validate_user_id(user_id)
 
     if not isinstance(title, str) or not title.strip():
         raise ValueError("Conversation title must be a non-empty string.")
@@ -840,10 +942,10 @@ def create_conversation(title="New conversation"):
     with get_connection() as connection:
         connection.execute(
             """
-            INSERT INTO conversations (id, title)
-            VALUES (?, ?)
+            INSERT INTO conversations (id, title, user_id)
+            VALUES (?, ?, ?)
             """,
-            (conversation_id, title.strip()[:100]),
+            (conversation_id, title.strip()[:100], user_id),
         )
 
     return conversation_id
@@ -851,11 +953,14 @@ def create_conversation(title="New conversation"):
 
 def save_conversation_message(
     conversation_id,
+    user_id,
     role,
     content,
     tool_name=None,
 ):
-    """Persist one user or assistant message."""
+    """Persist a message only if the conversation belongs to the user."""
+
+    user_id = _validate_user_id(user_id)
 
     if not isinstance(conversation_id, str) or not conversation_id.strip():
         raise ValueError("Conversation ID must be a non-empty string.")
@@ -875,9 +980,9 @@ def save_conversation_message(
             """
             SELECT id
             FROM conversations
-            WHERE id = ?
+            WHERE id = ? AND user_id = ?
             """,
-            (conversation_id,),
+            (conversation_id, user_id),
         ).fetchone()
 
         if conversation is None:
@@ -912,25 +1017,27 @@ def save_conversation_message(
                     ELSE title
                 END,
                 updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
+                WHERE id = ? AND user_id = ?
                 """,
-                (content.strip()[:100], conversation_id),
+                (content.strip()[:100], conversation_id, user_id),
             )
         else:
             connection.execute(
                 """
                 UPDATE conversations
                 SET updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
+                WHERE id = ? AND user_id = ?
                 """,
-                (conversation_id,),
+                (conversation_id, user_id),
             )
 
         return cursor.lastrowid
 
 
-def get_conversation_messages(conversation_id, limit=None):
-    """Retrieve messages in chronological order."""
+def get_conversation_messages(conversation_id, user_id, limit=None):
+    """Retrieve messages only from a conversation owned by the user."""
+
+    user_id = _validate_user_id(user_id)
 
     if not isinstance(conversation_id, str) or not conversation_id.strip():
         raise ValueError("Conversation ID must be a non-empty string.")
@@ -946,9 +1053,9 @@ def get_conversation_messages(conversation_id, limit=None):
             """
             SELECT id
             FROM conversations
-            WHERE id = ?
+            WHERE id = ? AND user_id = ?
             """,
-            (conversation_id,),
+            (conversation_id, user_id),
         ).fetchone()
 
         if conversation is None:
@@ -985,8 +1092,10 @@ def get_conversation_messages(conversation_id, limit=None):
         return [dict(row) for row in rows]
 
 
-def get_all_conversations():
-    """Retrieve conversation summaries, newest first."""
+def get_all_conversations(user_id):
+    """Retrieve only the authenticated user's conversations, newest first."""
+
+    user_id = _validate_user_id(user_id)
 
     with get_connection() as connection:
         connection.row_factory = sqlite3.Row
@@ -1002,16 +1111,20 @@ def get_all_conversations():
             FROM conversations AS c
             LEFT JOIN conversation_messages AS m
                 ON c.id = m.conversation_id
-            GROUP BY c.id
+            WHERE c.user_id = ?
+            GROUP BY c.id, c.title, c.created_at, c.updated_at
             ORDER BY c.updated_at DESC, c.id DESC
-            """
+            """,
+            (user_id,),
         ).fetchall()
 
         return [dict(row) for row in rows]
 
 
-def delete_conversation(conversation_id):
-    """Delete a conversation and its messages."""
+def delete_conversation(conversation_id, user_id):
+    """Delete a conversation only if it belongs to the authenticated user."""
+
+    user_id = _validate_user_id(user_id)
 
     if not isinstance(conversation_id, str) or not conversation_id.strip():
         raise ValueError("Conversation ID must be a non-empty string.")
@@ -1020,12 +1133,249 @@ def delete_conversation(conversation_id):
         cursor = connection.execute(
             """
             DELETE FROM conversations
-            WHERE id = ?
+            WHERE id = ? AND user_id = ?
             """,
-            (conversation_id,),
+            (conversation_id, user_id),
         )
 
         if cursor.rowcount == 0:
             raise ValueError("Conversation was not found.")
+
+        return True
+
+# ==========================================================
+# Persistent personal memory operations.
+# ==========================================================
+
+def save_user_memory(
+    user_id,
+    memory_key,
+    content,
+    category,
+    source_type,
+    source_text,
+):
+    """
+    Save an explicit personal fact or correction.
+
+    If an active memory already exists with the same key
+    for this user, it is marked as superseded first.
+
+    Previous versions remain available in memory history.
+    """
+
+    user_id = _validate_user_id(user_id)
+
+    fields = {
+        "memory_key": memory_key,
+        "content": content,
+        "category": category,
+        "source_text": source_text,
+    }
+
+    for field, value in fields.items():
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{field} must be a non-empty string.")
+
+    memory_key = memory_key.strip()
+    content = content.strip()
+    category = category.strip()
+    source_text = source_text.strip()
+
+    if source_type not in (
+        "explicit_statement",
+        "correction",
+    ):
+        raise ValueError(
+            "Source type must be 'explicit_statement' or 'correction'."
+        )
+
+    memory_id = str(uuid.uuid4())
+
+    with get_connection() as connection:
+
+        # Supersede the previous active version, if one exists.
+        connection.execute(
+            """
+            UPDATE user_memories
+            SET status = 'superseded',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = ?
+              AND memory_key = ?
+              AND status = 'active'
+            """,
+            (user_id, memory_key),
+        )
+
+        # Insert the new active version.
+        connection.execute(
+            """
+            INSERT INTO user_memories (
+                id,
+                user_id,
+                memory_key,
+                content,
+                category,
+                source_type,
+                source_text,
+                status
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'active')
+            """,
+            (
+                memory_id,
+                user_id,
+                memory_key,
+                content,
+                category,
+                source_type,
+                source_text,
+            ),
+        )
+
+    return memory_id
+
+
+def get_user_memories(user_id, category=None, limit=None):
+    """
+    Retrieve active personal memories belonging to one user.
+    """
+
+    user_id = _validate_user_id(user_id)
+
+    if category is not None:
+        if not isinstance(category, str) or not category.strip():
+            raise ValueError("Category must be a non-empty string or None.")
+
+    if limit is not None:
+        if type(limit) is not int or limit < 1:
+            raise ValueError("Limit must be a positive integer or None.")
+
+    query = """
+        SELECT
+            id,
+            user_id,
+            memory_key,
+            content,
+            category,
+            source_type,
+            source_text,
+            status,
+            created_at,
+            updated_at
+        FROM user_memories
+        WHERE user_id = ?
+          AND status = 'active'
+    """
+
+    parameters = [user_id]
+
+    if category is not None:
+        query += " AND category = ?"
+        parameters.append(category.strip())
+
+    query += " ORDER BY updated_at DESC, id DESC"
+
+    if limit is not None:
+        query += " LIMIT ?"
+        parameters.append(limit)
+
+    with get_connection() as connection:
+        connection.row_factory = sqlite3.Row
+
+        rows = connection.execute(
+            query,
+            parameters,
+        ).fetchall()
+
+        return [dict(row) for row in rows]
+
+
+def get_user_memory_history(
+    user_id,
+    memory_key=None,
+    limit=None,
+):
+    """
+    Retrieve active and superseded memory versions
+    belonging to one user.
+    """
+
+    user_id = _validate_user_id(user_id)
+
+    if memory_key is not None:
+        if not isinstance(memory_key, str) or not memory_key.strip():
+            raise ValueError(
+                "Memory key must be a non-empty string or None."
+            )
+
+    if limit is not None:
+        if type(limit) is not int or limit < 1:
+            raise ValueError("Limit must be a positive integer or None.")
+
+    query = """
+        SELECT
+            id,
+            user_id,
+            memory_key,
+            content,
+            category,
+            source_type,
+            source_text,
+            status,
+            created_at,
+            updated_at
+        FROM user_memories
+        WHERE user_id = ?
+    """
+
+    parameters = [user_id]
+
+    if memory_key is not None:
+        query += " AND memory_key = ?"
+        parameters.append(memory_key.strip())
+
+    query += " ORDER BY created_at DESC, id DESC"
+
+    if limit is not None:
+        query += " LIMIT ?"
+        parameters.append(limit)
+
+    with get_connection() as connection:
+        connection.row_factory = sqlite3.Row
+
+        rows = connection.execute(
+            query,
+            parameters,
+        ).fetchall()
+
+        return [dict(row) for row in rows]
+
+
+def delete_user_memory(user_id, memory_id):
+    """
+    Delete a personal memory only if it belongs to the user.
+
+    This permanently deletes the selected memory record.
+    """
+
+    user_id = _validate_user_id(user_id)
+
+    if not isinstance(memory_id, str) or not memory_id.strip():
+        raise ValueError("Memory ID must be a non-empty string.")
+
+    with get_connection() as connection:
+
+        cursor = connection.execute(
+            """
+            DELETE FROM user_memories
+            WHERE id = ?
+              AND user_id = ?
+            """,
+            (memory_id.strip(), user_id),
+        )
+
+        if cursor.rowcount == 0:
+            raise ValueError("Memory was not found.")
 
         return True

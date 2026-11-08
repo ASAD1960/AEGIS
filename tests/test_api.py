@@ -1,10 +1,13 @@
-﻿
+
 from fastapi.testclient import TestClient
 
-from app.api.main import app
+from app.api.main import app, get_current_user_id
 
 
 client = TestClient(app)
+
+TEST_USER_ID = "aegis-test-user-1"
+OTHER_USER_ID = "aegis-test-user-2"
 
 
 def test_health_check():
@@ -48,6 +51,31 @@ def test_registered_tools():
         "data_analysis",
     }
 
+
+# ==========================================================
+# Authentication tests.
+# ==========================================================
+
+def test_protected_endpoint_rejects_missing_authentication():
+    original_override = app.dependency_overrides.pop(
+        get_current_user_id,
+        None,
+    )
+
+    try:
+        response = client.get("/api/conversations")
+    finally:
+        if original_override is not None:
+            app.dependency_overrides[get_current_user_id] = (
+                original_override
+            )
+
+    assert response.status_code == 401
+
+
+# ==========================================================
+# Agent task API tests.
+# ==========================================================
 
 def test_calculator_task():
     response = client.post(
@@ -93,6 +121,10 @@ def test_csv_analysis_task():
 
     assert response.status_code == 400
 
+
+# ==========================================================
+# CSV upload API tests.
+# ==========================================================
 
 def test_csv_upload_success(tmp_path, monkeypatch):
     monkeypatch.setattr(
@@ -194,17 +226,15 @@ def test_csv_upload_rejects_invalid_encoding():
         "CSV file must use UTF-8 encoding."
     )
 
+
 # ==========================================================
 # Persistent conversation API tests.
 # ==========================================================
 
 def test_task_creates_persistent_conversation():
-
     response = client.post(
         "/api/tasks",
-        json={
-            "task": "Add 25 and 15",
-        },
+        json={"task": "Add 25 and 15"},
     )
 
     assert response.status_code == 200
@@ -232,12 +262,9 @@ def test_task_creates_persistent_conversation():
 
 
 def test_task_continues_existing_conversation():
-
     first_response = client.post(
         "/api/tasks",
-        json={
-            "task": "Add 10 and 20",
-        },
+        json={"task": "Add 10 and 20"},
     )
 
     assert first_response.status_code == 200
@@ -266,19 +293,17 @@ def test_task_continues_existing_conversation():
     messages = history_response.json()["messages"]
 
     assert len(messages) == 4
-
     assert messages[0]["content"] == "Add 10 and 20"
     assert messages[2]["content"] == "Add 30 and 40"
 
 
 def test_conversation_list_endpoint():
-
     task_response = client.post(
         "/api/tasks",
-        json={
-            "task": "Add 5 and 5",
-        },
+        json={"task": "Add 5 and 5"},
     )
+
+    assert task_response.status_code == 200
 
     conversation_id = task_response.json()["conversation_id"]
 
@@ -303,13 +328,12 @@ def test_conversation_list_endpoint():
 
 
 def test_conversation_delete_endpoint():
-
     task_response = client.post(
         "/api/tasks",
-        json={
-            "task": "Add 8 and 12",
-        },
+        json={"task": "Add 8 and 12"},
     )
+
+    assert task_response.status_code == 200
 
     conversation_id = task_response.json()["conversation_id"]
 
@@ -328,9 +352,271 @@ def test_conversation_delete_endpoint():
 
 
 def test_missing_conversation_returns_404():
-
     response = client.get(
         "/api/conversations/non-existent-conversation/messages"
     )
 
     assert response.status_code == 404
+
+
+# ==========================================================
+# Conversation ownership tests.
+# ==========================================================
+
+def test_user_cannot_read_another_users_conversation():
+    task_response = client.post(
+        "/api/tasks",
+        json={"task": "Add 10 and 15"},
+    )
+
+    assert task_response.status_code == 200
+
+    conversation_id = task_response.json()["conversation_id"]
+
+    original_override = app.dependency_overrides[
+        get_current_user_id
+    ]
+
+    app.dependency_overrides[get_current_user_id] = (
+        lambda: OTHER_USER_ID
+    )
+
+    try:
+        response = client.get(
+            f"/api/conversations/{conversation_id}/messages"
+        )
+    finally:
+        app.dependency_overrides[get_current_user_id] = (
+            original_override
+        )
+
+    assert response.status_code == 404
+
+
+def test_user_cannot_delete_another_users_conversation():
+    task_response = client.post(
+        "/api/tasks",
+        json={"task": "Add 10 and 15"},
+    )
+
+    assert task_response.status_code == 200
+
+    conversation_id = task_response.json()["conversation_id"]
+
+    original_override = app.dependency_overrides[
+        get_current_user_id
+    ]
+
+    app.dependency_overrides[get_current_user_id] = (
+        lambda: OTHER_USER_ID
+    )
+
+    try:
+        response = client.delete(
+            f"/api/conversations/{conversation_id}"
+        )
+    finally:
+        app.dependency_overrides[get_current_user_id] = (
+            original_override
+        )
+
+    assert response.status_code == 404
+
+    # The original owner must still be able to read the conversation.
+    history_response = client.get(
+        f"/api/conversations/{conversation_id}/messages"
+    )
+
+    assert history_response.status_code == 200
+# ==========================================================
+# Persistent personal memory API tests.
+# ==========================================================
+
+def test_task_retrieves_and_passes_personal_memories(monkeypatch):
+    expected_memories = [
+        {
+            "memory_key": "programming.java",
+            "content": "The user enjoys Java.",
+            "category": "interests",
+            "source_type": "explicit_statement",
+        },
+        {
+            "memory_key": "education.java",
+            "content": "The user studied Java in Object-Oriented Programming.",
+            "category": "education",
+            "source_type": "explicit_statement",
+        },
+    ]
+
+    retrieved_users = []
+    agent_calls = []
+
+    def fake_get_user_memories(user_id, limit=None):
+        retrieved_users.append((user_id, limit))
+        return expected_memories
+
+    def fake_process_request(
+        *,
+        task,
+        conversation_history=None,
+        personal_memories=None,
+    ):
+        agent_calls.append({
+            "task": task,
+            "conversation_history": conversation_history,
+            "personal_memories": personal_memories,
+        })
+
+        return {
+            "result": "Personal memory integration test.",
+            "tool_name": None,
+        }
+
+    monkeypatch.setattr(
+        "app.api.main.get_user_memories",
+        fake_get_user_memories,
+    )
+
+    monkeypatch.setattr(
+        "app.api.main.agent.process_request",
+        fake_process_request,
+    )
+
+    response = client.post(
+        "/api/tasks",
+        json={"task": "What do you remember about Java?"},
+    )
+
+    assert response.status_code == 200
+
+    assert retrieved_users == [
+        (TEST_USER_ID, 30)
+    ]
+
+    assert len(agent_calls) == 1
+
+    assert agent_calls[0]["personal_memories"] == expected_memories
+
+# ==========================================================
+# Automatic personal memory persistence API tests.
+# ==========================================================
+
+def test_explicit_personal_statement_is_saved(monkeypatch):
+
+    from app.memory import database
+
+    monkeypatch.setattr(
+        "app.api.main.agent.process_request",
+        lambda **kwargs: {
+            "result": "Memory test completed.",
+            "tool_name": None,
+        },
+    )
+
+    response = client.post(
+        "/api/tasks",
+        json={"task": "I enjoy Java."},
+    )
+
+    assert response.status_code == 200
+
+    memories = database.get_user_memories(TEST_USER_ID)
+
+    assert len(memories) == 1
+    assert memories[0]["memory_key"] == (
+        "programming.java.preference"
+    )
+    assert memories[0]["content"] == "The user enjoys Java."
+    assert memories[0]["source_type"] == "explicit_statement"
+
+
+def test_correction_supersedes_previous_memory(monkeypatch):
+
+    from app.memory import database
+
+    monkeypatch.setattr(
+        "app.api.main.agent.process_request",
+        lambda **kwargs: {
+            "result": "Memory test completed.",
+            "tool_name": None,
+        },
+    )
+
+    first = client.post(
+        "/api/tasks",
+        json={"task": "I enjoy Java."},
+    )
+
+    second = client.post(
+        "/api/tasks",
+        json={"task": "Correction: I do not enjoy Java."},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+    active = database.get_user_memories(TEST_USER_ID)
+
+    assert len(active) == 1
+    assert active[0]["content"] == "The user does not enjoy Java."
+    assert active[0]["source_type"] == "correction"
+
+    history = database.get_user_memory_history(
+        TEST_USER_ID,
+        memory_key="programming.java.preference",
+    )
+
+    assert len(history) == 2
+    assert sum(m["status"] == "active" for m in history) == 1
+    assert sum(m["status"] == "superseded" for m in history) == 1
+
+
+def test_ambiguous_statement_is_not_saved(monkeypatch):
+
+    from app.memory import database
+
+    monkeypatch.setattr(
+        "app.api.main.agent.process_request",
+        lambda **kwargs: {
+            "result": "Memory test completed.",
+            "tool_name": None,
+        },
+    )
+
+    response = client.post(
+        "/api/tasks",
+        json={"task": "I might learn Python."},
+    )
+
+    assert response.status_code == 200
+    assert database.get_user_memories(TEST_USER_ID) == []
+
+
+def test_repeated_statement_does_not_create_duplicate_history(
+    monkeypatch,
+):
+
+    from app.memory import database
+
+    monkeypatch.setattr(
+        "app.api.main.agent.process_request",
+        lambda **kwargs: {
+            "result": "Memory test completed.",
+            "tool_name": None,
+        },
+    )
+
+    for _ in range(2):
+        response = client.post(
+            "/api/tasks",
+            json={"task": "I enjoy Java."},
+        )
+
+        assert response.status_code == 200
+
+    history = database.get_user_memory_history(
+        TEST_USER_ID,
+        memory_key="programming.java.preference",
+    )
+
+    assert len(history) == 1

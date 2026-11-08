@@ -1,4 +1,3 @@
-
 """
 AEGIS Agent Core
 
@@ -6,7 +5,7 @@ Main agent connecting tools, tool selection,
 task parsing, strategies, execution and feedback.
 
 Supports persistent conversational context through
-conversation history and Cloudflare Workers AI.
+conversation history and personal memories.
 """
 
 import os
@@ -123,6 +122,7 @@ class Agent:
         filter_operator=None,
         filter_value=None,
         conversation_history=None,
+        personal_memories=None,
     ):
         """
         Unified entry point for processing user requests.
@@ -131,7 +131,8 @@ class Agent:
         supported tasks to their registered tools.
 
         General questions are handled by the configured
-        language model provider with optional conversation history.
+        language model provider with optional conversation history
+        and persistent personal memories.
 
         CSV requests require file_path. Optional CSV filtering
         arguments are forwarded to the data-analysis tool.
@@ -143,6 +144,7 @@ class Agent:
             filter_operator: Optional CSV filter operator.
             filter_value: Optional CSV filter value.
             conversation_history: Previous conversation messages.
+            personal_memories: Authenticated user's active personal memories.
 
         Returns:
             dict: Tool name, arguments and execution result.
@@ -221,6 +223,7 @@ class Agent:
             return self.process_general_chat(
                 task,
                 conversation_history=conversation_history,
+                personal_memories=personal_memories,
             )
 
         # Route calculation requests.
@@ -251,7 +254,12 @@ class Agent:
             f"Unsupported task type: {tool_name}"
         )
 
-    def process_general_chat(self, task, conversation_history=None):
+    def process_general_chat(
+        self,
+        task,
+        conversation_history=None,
+        personal_memories=None,
+    ):
         """
         Generate a response using the configured language model.
 
@@ -261,6 +269,7 @@ class Agent:
         Args:
             task: Current user message.
             conversation_history: Previous conversation messages.
+            personal_memories: Authenticated user's active personal memories.
 
         Returns:
             dict: Provider information and generated response.
@@ -274,13 +283,11 @@ class Agent:
 
                 client = CloudflareClient()
 
-                if conversation_history:
-                    result = client.generate_response(
-                        task,
-                        conversation_history=conversation_history,
-                    )
-                else:
-                    result = client.generate_response(task)
+                result = client.generate_response(
+                    task,
+                    conversation_history=conversation_history,
+                    personal_memories=personal_memories,
+                )
 
                 return {
                     "tool_name": "cloudflare",
@@ -293,7 +300,11 @@ class Agent:
 
             elif self.llm_provider == "ollama":
 
-                result = self.llm_client.generate_response(task)
+                result = self.llm_client.generate_response(
+                    task,
+                    conversation_history=conversation_history,
+                    personal_memories=personal_memories,
+                )
 
                 return {
                     "tool_name": "ollama",
